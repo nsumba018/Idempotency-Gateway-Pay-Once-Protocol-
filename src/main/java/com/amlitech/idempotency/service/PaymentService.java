@@ -2,6 +2,7 @@ package com.amlitech.idempotency.service;
 
 import com.amlitech.idempotency.model.PaymentRequests;
 import com.amlitech.idempotency.model.PaymentResponse;
+import com.amlitech.idempotency.model.PaymentResult;
 import com.amlitech.idempotency.model.StoredPayment;
 import com.amlitech.idempotency.store.PaymentStore;
 import org.springframework.http.HttpStatus;
@@ -17,11 +18,11 @@ public class PaymentService {
         this.paymentStore = paymentStore;
     }
 
-    public PaymentResponse processPayment(String key, PaymentRequests requests){
+    public PaymentResult processPayment(String key, PaymentRequests requests){
         if(paymentStore.exists(key)){
             StoredPayment saved = paymentStore.get(key);
             if (saved.getRequest().getAmount() == requests.getAmount() && saved.getRequest().getCurrency().equals(requests.getCurrency())){
-                return saved.getResponse();
+                return new PaymentResult(saved.getResponse(), true);
             }else{
                 throw new ResponseStatusException(
                         HttpStatus.CONFLICT, "Idempotency key already used for a different request body."
@@ -37,6 +38,6 @@ public class PaymentService {
         StoredPayment payment = new StoredPayment(response, requests);
         paymentStore.save(key, payment);
 
-        return response;
+        return new PaymentResult(response, false);
     }
 }
