@@ -1,6 +1,7 @@
 package com.amlitech.idempotency.controller;
 
 import com.amlitech.idempotency.model.PaymentRequests;
+import com.amlitech.idempotency.model.PaymentResponse;
 import com.amlitech.idempotency.service.PaymentService;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,8 +19,8 @@ public class PaymentController {
     }
 
     @PostMapping("/process-payment")
-    public String processPayment(@RequestBody PaymentRequests requests){
-        return paymentService.processPayment(requests);
+    public PaymentResponse processPayment(@RequestHeader("Idempotency-Key") String key, @RequestBody PaymentRequests requests){
+        return paymentService.processPayment(key, requests);
     }
 
 }
