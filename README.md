@@ -8,11 +8,11 @@ This project simulates a fintech payment backend where repeated payment requests
 
 # Problem Statement
 
-Payment systems can receive duplicate requests because of:
+Payment systems may receive duplicate requests because of:
 
-- Network timeout
-- Client retry logic
-- Slow server response
+* Network timeout
+* Client retry logic
+* Slow server response
 
 Without protection, customers may be charged more than once.
 
@@ -20,49 +20,134 @@ This project solves that problem using an idempotency layer.
 
 ---
 
-# How It Works
+# Tech Stack
 
-- First request with a new key is processed normally.
-- The response is saved in memory.
-- Repeated request with the same key and same body returns the saved response instantly.
-- Same key with a different request body returns `409 Conflict`.
+* Java 17
+* Spring Boot
+* Maven
+* ConcurrentHashMap (in-memory store)
 
 ---
-# Architecture Diagram
-    src/main/java/com/amalitech/idempotency
-        │── controller
-        │── service
-        │── model
-        │── store
-        │── exception
 
-BASE URL: http://localhost:8080
-s
-# Architecture Diagram
+# Project Structure
+
+```text
+src/main/java/com/amalitech/idempotency
+├── controller
+├── service
+├── model
+├── store
+└── exception
+```
+
+---
+
+# Base URL
+
+```text
+http://localhost:8080
+```
+
+---
+
+# Architecture Flow
 
 ```text
 Client
    |
    | POST /process-payment
-   | Header: Idempotency-Key: abc123
-   | Body: {"amount":100,"currency":"GHS"}
+   | Header: Idempotency-Key
    v
 PaymentController
    |
    v
 PaymentService
    |
-   |---- Key exists?
-         |
-         |-- NO --> Process payment (2 sec delay)
-         |         Save request + response
-         |         Return success
-         |
-         |-- YES --> Compare request body
-                    |
-                    |-- Same body --> Return saved response
-                    |                Header: X-Cache-Hit: true
-                    |
-                    |-- Different body --> 409 Conflict
-                
+   |-- New Key --> Process payment (2 sec delay)
+   |              Save response
+   |
+   |-- Existing Key + Same Body --> Return saved response
+   |                               X-Cache-Hit: true
+   |
+   |-- Existing Key + Different Body --> 409 Conflict
+```
 
+---
+
+# Setup Instructions
+
+```bash
+git clone <repo-url>
+cd Idempotency-Gateway-Pay-Once-Protocol-
+./mvnw spring-boot:run
+```
+
+---
+
+# API Documentation
+
+## POST /process-payment
+
+### Headers
+
+* Content-Type: application/json
+* Idempotency-Key: abc123
+
+### Body
+
+```json
+{
+  "amount": 100,
+  "currency": "GHS"
+}
+```
+
+---
+
+# Responses
+
+## First Request
+
+```json
+{
+  "message": "Charged 100.0 GHS"
+}
+```
+
+## Duplicate Request
+
+Returns saved response instantly.
+
+Header:
+
+```text
+X-Cache-Hit: true
+```
+
+## Same Key Different Body
+
+Status:
+
+```text
+409 Conflict
+```
+
+---
+
+# Design Decisions
+
+* Used Service Layer to separate controller and business logic.
+* Used ConcurrentHashMap for fast in-memory idempotency storage.
+* Used headers for key handling as required.
+
+---
+
+# Developer Choice Feature
+
+Added `X-Cache-Hit: true` header to indicate replayed responses.
+
+---
+
+# Author
+
+Nsumba Herve
