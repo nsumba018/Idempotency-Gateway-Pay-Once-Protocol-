@@ -1,0 +1,1845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Idempotency Gateway — Project Explained</title>
+<style>
+  :root {
+    --navy: #1f3a5f;
+    --navy-dark: #16293f;
+    --accent: #2f6fb0;
+    --bg: #ffffff;
+    --text: #1f2933;
+    --muted: #52606d;
+    --code-bg: #f4f6f8;
+    --code-border: #d6dde4;
+    --green-bg: #e9f6ec;
+    --green-border: #7bbd8a;
+    --gold-bg: #fdf6e3;
+    --gold-border: #d4b556;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: #e8ecf0;
+    color: var(--text);
+    font-family: Georgia, "Times New Roman", serif;
+    line-height: 1.7;
+    font-size: 17px;
+  }
+  .page {
+    max-width: 860px;
+    margin: 0 auto;
+    background: var(--bg);
+    padding: 56px 64px 80px;
+    box-shadow: 0 0 24px rgba(0,0,0,0.12);
+  }
+  /* ---- Title block ---- */
+  .cover {
+    text-align: center;
+    padding: 60px 0 40px;
+    border-bottom: 3px solid var(--navy);
+    margin-bottom: 48px;
+  }
+  .cover h1 {
+    font-size: 2.6rem;
+    color: var(--navy);
+    margin: 0 0 6px;
+    letter-spacing: 0.5px;
+  }
+  .cover .sub { font-size: 1.15rem; color: var(--muted); font-style: italic; }
+  .cover .tagline { font-size: 1.05rem; margin-top: 18px; color: var(--text); }
+  .cover .meta { margin-top: 36px; color: var(--muted); font-size: 0.95rem; line-height: 1.9; }
+  .cover .stack { font-weight: bold; color: var(--navy); }
+
+  h2.phase {
+    color: var(--navy);
+    font-size: 1.9rem;
+    border-bottom: 3px solid var(--navy);
+    padding-bottom: 8px;
+    margin: 64px 0 28px;
+  }
+  h3 {
+    color: var(--navy);
+    font-size: 1.3rem;
+    border-left: 5px solid var(--accent);
+    padding-left: 12px;
+    margin: 40px 0 14px;
+  }
+  h4 {
+    color: var(--accent);
+    font-size: 1.08rem;
+    margin: 28px 0 10px;
+  }
+  p { margin: 14px 0; }
+  ul, ol { margin: 14px 0; padding-left: 26px; }
+  li { margin: 8px 0; }
+  strong { color: var(--navy-dark); }
+  em { color: #355; }
+
+  /* ---- Inline + block code ---- */
+  code {
+    font-family: "SF Mono", "Consolas", "Menlo", monospace;
+    background: #eef1f4;
+    color: #b03a2e;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.86em;
+  }
+  pre {
+    background: #1e2a38;
+    color: #e6edf3;
+    border-radius: 6px;
+    padding: 18px 20px;
+    overflow-x: auto;
+    border-left: 5px solid var(--accent);
+    margin: 20px 0;
+    line-height: 1.55;
+  }
+  pre code {
+    background: none;
+    color: inherit;
+    padding: 0;
+    font-size: 0.83rem;
+    white-space: pre;
+  }
+  /* token colours */
+  .k  { color: #ff9d6f; }   /* keyword */
+  .a  { color: #7ee787; }   /* annotation */
+  .s  { color: #a5d6ff; }   /* string */
+  .c  { color: #8b98a5; font-style: italic; }  /* comment */
+  .t  { color: #79c0ff; }   /* type */
+  .n  { color: #f0c674; }   /* number */
+  .x  { color: #d2a8ff; }   /* tag */
+
+  /* ---- Tables ---- */
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 20px 0;
+    font-family: Georgia, serif;
+    font-size: 0.95rem;
+  }
+  th {
+    background: var(--navy);
+    color: #fff;
+    text-align: left;
+    padding: 10px 14px;
+  }
+  td {
+    border: 1px solid var(--code-border);
+    padding: 10px 14px;
+    vertical-align: top;
+  }
+  tr:nth-child(even) td { background: #f6f8fa; }
+
+  /* ---- Callout boxes ---- */
+  .callout {
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin: 20px 0;
+    font-size: 0.97rem;
+  }
+  .callout p { margin: 6px 0; }
+  .interview { background: var(--green-bg); border: 1px solid var(--green-border); }
+  .honest    { background: var(--gold-bg);  border: 1px solid var(--gold-border); }
+  .callout .label { font-weight: bold; color: var(--navy-dark); }
+
+  /* ---- TOC ---- */
+  .toc {
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    border-radius: 6px;
+    padding: 20px 28px;
+    margin: 32px 0;
+  }
+  .toc h3 { border: none; padding: 0; margin: 0 0 10px; }
+  .toc ol { margin: 0; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+
+  /* ---- ASCII flow diagram ---- */
+  pre.flow {
+    background: #f4f6f8;
+    color: #1e2a38;
+    border-left: 5px solid var(--accent);
+    font-size: 0.8rem;
+  }
+
+  hr { border: none; border-top: 1px solid var(--code-border); margin: 40px 0; }
+
+  @media print {
+    body { background: #fff; }
+    .page { box-shadow: none; max-width: 100%; padding: 0; }
+    pre { white-space: pre-wrap; }
+  }
+  @media (max-width: 720px) {
+    .page { padding: 32px 20px 56px; }
+    body { font-size: 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ================= COVER ================= -->
+  <div class="cover">
+    <h1>Idempotency Gateway</h1>
+    <div class="sub">Pay-Once Protocol</div>
+    <div class="tagline">A Complete, Beginner-Friendly Project Explanation &amp; Interview Preparation Guide</div>
+    <div class="meta">
+      <span class="stack">Spring Boot &middot; Java 17 &middot; Maven</span><br><br>
+      Prepared for: Apprenticeship Technical Interview &amp; Project Presentation<br>
+      Author of the project: Nsumba Herve<br>
+      Document type: Deep teaching walkthrough (7 phases)
+    </div>
+  </div>
+
+  <!-- ================= HOW TO USE ================= -->
+  <h2 class="phase" id="how-to-use">How To Use This Document</h2>
+  <p>This document teaches you your own project from zero, the way a patient mentor would teach a junior
+  developer the day before an interview. It does not assume you already understand backend engineering.
+  Every concept is explained <strong>before</strong> it is used, and the reason a thing exists is explained
+  <strong>before</strong> how it works.</p>
+
+  <p>The document is organised into seven phases, exactly as your <code>Explain.md</code> file requested:</p>
+
+  <div class="toc">
+    <h3>Contents</h3>
+    <ol>
+      <li><a href="#phase1">Phase 1 — Project Overview</a>: what the project does, what idempotency is, and all the core web concepts (REST, HTTP, JSON, status codes, client/server).</li>
+      <li><a href="#phase2">Phase 2 — Project Architecture</a>: the four layers of your application and why they are separated.</li>
+      <li><a href="#phase3">Phase 3 — Spring Boot Fundamentals</a>: Spring Boot, Maven, Tomcat, dependency injection, and every annotation you used.</li>
+      <li><a href="#phase4">Phase 4 — Full Code Walkthrough</a>: every file, every line, explained slowly.</li>
+      <li><a href="#phase5">Phase 5 — Request Flow Simulation</a>: three real scenarios traced through the code.</li>
+      <li><a href="#phase6">Phase 6 — Mock Interview</a>: questions and confident answers.</li>
+      <li><a href="#phase7">Phase 7 — 5-Minute Presentation Script</a>: a word-for-word speaking script.</li>
+    </ol>
+  </div>
+
+  <div class="callout honest">
+    <p><span class="label">Read this in order.</span> Each phase builds on the one before it. By Phase 4 you
+    will recognise every word, so the code walkthrough will feel easy instead of overwhelming.</p>
+  </div>
+
+  <!-- ================= PHASE 1 ================= -->
+  <h2 class="phase" id="phase1">Phase 1 — Project Overview</h2>
+
+  <h3>1.1 What This Project Does (In Real-World Fintech Terms)</h3>
+  <p>Imagine you are using a mobile money app or a card to pay for something — let's say you are buying
+  airtime for 100 Ghana Cedis (GHS). You tap the <em>"Pay"</em> button. Behind the scenes, your phone
+  (the <strong>client</strong>) sends a message over the internet to a payment company's computer (the
+  <strong>server</strong>) that says: <em>"Please charge this customer 100 GHS."</em></p>
+
+  <p>Now imagine the internet is slow that day. Your phone sends the message, but the reply takes too long
+  to come back. Your phone gives up waiting and thinks: <em>"The payment failed, let me try again."</em> So
+  it sends the <strong>same payment message a second time</strong>.</p>
+
+  <p>Here is the dangerous part: the first message may have actually <strong>succeeded</strong> on the
+  server — the customer was already charged 100 GHS. The reply was just slow. If the server now processes
+  the second message too, the customer is charged <strong>200 GHS for one purchase</strong>. That is a
+  <strong>double charge</strong>, and in the payment industry it is a serious, money-losing,
+  trust-destroying bug.</p>
+
+  <p><strong>Your project is the safety guard that prevents this.</strong> It is a small backend service
+  called the <em>Idempotency Gateway</em> (you nicknamed it the <em>"Pay-Once Protocol"</em>). It sits in
+  front of the payment logic and enforces one simple promise: <strong>no matter how many times the same
+  payment request arrives, the customer is charged exactly once.</strong> Every retry after the first one
+  simply receives a copy of the original answer — without charging again.</p>
+
+  <div class="callout interview">
+    <p><span class="label">One-sentence summary you can say in the interview:</span> "My project is a
+    Spring Boot REST API that makes payment requests safe to retry, so a customer is never accidentally
+    charged twice when the network is unreliable."</p>
+  </div>
+
+  <h3>1.2 What "Idempotency" Means</h3>
+  <p>"Idempotency" is a slightly scary word for a very simple idea.</p>
+  <p><strong>An operation is idempotent if doing it many times has the same effect as doing it once.</strong></p>
+  <p>Everyday examples:</p>
+  <ul>
+    <li><strong>A light switch set to "OFF"</strong> — flicking it to OFF when it is already OFF changes
+    nothing. Pressing "OFF" five times leaves the light in exactly the same state as pressing it once.
+    That is idempotent.</li>
+    <li><strong>An elevator "call" button</strong> — pressing it ten times does not make ten elevators
+    come. The result is the same as pressing once. Idempotent.</li>
+    <li><strong>Charging money</strong> — this is <em>naturally NOT idempotent</em>. Each charge removes
+    money. Doing it twice removes twice the money. This is exactly the problem.</li>
+  </ul>
+  <p>Because charging money is naturally <em>not</em> idempotent, your project's job is to <strong>add
+  idempotency on top of it artificially</strong>. You make a non-idempotent operation (charging) behave
+  like an idempotent one by remembering what you have already done.</p>
+
+  <div class="callout interview">
+    <p><span class="label">Interview-ready definition:</span> "Idempotency means that performing the same
+    operation multiple times produces the same result as performing it once. My gateway makes payments
+    idempotent so retries are safe."</p>
+  </div>
+
+  <h3>1.3 Why Double Charging Happens</h3>
+  <p>Double charging is almost never caused by a customer clicking twice on purpose. It is caused by the
+  <strong>unreliable nature of the internet</strong>. The three classic causes (also listed in your
+  README) are:</p>
+  <ul>
+    <li><strong>Network timeout:</strong> The client sends the request, the server processes it, but the
+    response gets lost or delayed on the way back. The client never hears "success", so it assumes failure
+    and retries.</li>
+    <li><strong>Client retry logic:</strong> Many apps are programmed to automatically resend a request if
+    they don't get a reply quickly. This automatic retry is good for reliability but dangerous for
+    payments.</li>
+    <li><strong>Slow server response:</strong> If the server takes a long time (for example, your project
+    intentionally simulates a 2-second processing delay), the client may lose patience and resend before
+    the first answer arrives.</li>
+  </ul>
+  <p>The crucial insight: <strong>the client cannot tell the difference between "my request was lost" and
+  "my request succeeded but the answer was lost."</strong> From the client's point of view both look
+  identical — silence. So the client retries. The fix cannot live on the client; it must live on the
+  <strong>server</strong>, which <em>does</em> know whether it already processed the request.</p>
+
+  <h3>1.4 Why Payment Systems Use Idempotency Keys</h3>
+  <p>To "remember what was already done", the server needs a way to recognise that two separate requests
+  are really <strong>the same logical payment</strong>. It cannot rely on the request body alone, because
+  two genuinely different customers might both pay "100 GHS" — those are different payments that happen to
+  look identical.</p>
+  <p>The solution is the <strong>idempotency key</strong>. The client generates a unique identifier (for
+  example a random string like <code>abc123</code> or a UUID) <em>once</em>, when the user first taps
+  "Pay". The client then attaches that same key to the <strong>first request and to every retry of that
+  same payment</strong>.</p>
+  <p>The server's logic becomes:</p>
+  <ul>
+    <li>"Have I seen this key before? <strong>No</strong> &rarr; this is a brand-new payment. Process it,
+    then save the key and the result."</li>
+    <li>"Have I seen this key before? <strong>Yes</strong> &rarr; this is a retry. Do <em>not</em> charge
+    again. Just return the saved result."</li>
+  </ul>
+  <p>The key is the thread that ties a request and all of its retries together into one identity. This is
+  exactly how real companies like Stripe, PayPal, and Paystack do it — Stripe famously uses an HTTP header
+  called <code>Idempotency-Key</code>, which is the same name your project uses.</p>
+
+  <h3>1.5 What Problem This System Solves</h3>
+  <p>In one paragraph: <strong>Your system removes the financial risk of network retries.</strong> It lets
+  a client safely retry a payment as many times as it wants, with zero fear of double charging, because
+  the server now has a memory. The first request with a given key does the real work; every later request
+  with that same key gets a fast, free replay of the original answer.</p>
+
+  <h3>1.6 What Happens During Retry Requests</h3>
+  <p>Walk through it slowly:</p>
+  <ol>
+    <li>The client sends payment request #1 with key <code>abc123</code>.</li>
+    <li>The server has never seen <code>abc123</code>. It processes the payment (in your project: waits 2
+    seconds to simulate real work), builds the response <em>"Charged 100.0 GHS"</em>, and
+    <strong>stores</strong> that response under the key <code>abc123</code>.</li>
+    <li>The response is sent back — but suppose it is lost or slow.</li>
+    <li>The client times out and sends retry request #2, with the <strong>same key</strong>
+    <code>abc123</code> and the same body.</li>
+    <li>The server looks up <code>abc123</code>, finds it already exists, and <strong>does not charge
+    again</strong>. It instantly returns the stored response <em>"Charged 100.0 GHS"</em> and adds a
+    special header <code>X-Cache-Hit: true</code> to signal "this is a replay, not a fresh charge."</li>
+  </ol>
+  <p>The customer ends up charged once. The client still receives a valid "success" answer. Everyone is
+  happy.</p>
+
+  <h3>1.7 Why This Is Important In Payment Systems</h3>
+  <ul>
+    <li><strong>Money correctness:</strong> A double charge is real money lost and a refund process
+    triggered. Idempotency prevents it at the source.</li>
+    <li><strong>Customer trust:</strong> Customers who get double-charged stop using the app. Trust is the
+    whole product in fintech.</li>
+    <li><strong>Regulatory and audit safety:</strong> Payment companies are audited. "We charge exactly
+    once" is a property they must be able to prove.</li>
+    <li><strong>It enables safe retries:</strong> Without idempotency, engineers are afraid to retry. With
+    it, retries become a reliability feature instead of a risk. The network can fail freely and the system
+    still behaves correctly.</li>
+  </ul>
+
+  <h3>1.8 Core Web Concepts You Must Know</h3>
+  <p>Before we look at any code, here is the vocabulary of backend web development. The interviewer may ask
+  any of these directly.</p>
+
+  <h4>Backend</h4>
+  <p>Software has two halves. The <strong>frontend</strong> is what the user sees and touches — the
+  buttons, screens, colours (a mobile app or a website). The <strong>backend</strong> is the part the user
+  never sees — it runs on a server, handles logic, talks to databases, and makes decisions. <strong>Your
+  project is pure backend.</strong> It has no screens; it only receives requests and sends answers.</p>
+
+  <h4>Client / Server Architecture</h4>
+  <p>This is the basic shape of almost every internet application.</p>
+  <ul>
+    <li>The <strong>client</strong> is the program that <em>asks</em> for something (a browser, a mobile
+    app, or a testing tool like Postman or <code>curl</code>).</li>
+    <li>The <strong>server</strong> is the program that <em>listens</em> for those asks, does the work,
+    and <em>answers</em>.</li>
+  </ul>
+  <p>The client always starts the conversation; the server only ever responds. They talk to each other
+  using a shared language called HTTP.</p>
+
+  <h4>HTTP</h4>
+  <p>HTTP (HyperText Transfer Protocol) is the agreed-upon set of rules — the "language" — that clients and
+  servers use to talk over the internet. Every HTTP conversation is one <strong>request</strong> from the
+  client followed by one <strong>response</strong> from the server. HTTP is <em>stateless</em>: the server
+  does not, by default, remember anything between two requests. (This is exactly why your project must
+  <em>deliberately</em> store data — to give the server a memory.)</p>
+
+  <h4>HTTP Methods &amp; the POST Request</h4>
+  <p>Every HTTP request has a <strong>method</strong> (also called a "verb") that says what kind of action
+  is wanted. The common ones:</p>
+  <table>
+    <thead><tr><th>Method</th><th>Meaning</th><th>Used for</th></tr></thead>
+    <tbody>
+      <tr><td><code>GET</code></td><td>"Give me data"</td><td>Reading information (does not change anything)</td></tr>
+      <tr><td><code>POST</code></td><td>"Here is data, do something with it"</td><td>Creating something / performing an action</td></tr>
+      <tr><td><code>PUT</code></td><td>"Replace this with that"</td><td>Updating an existing thing</td></tr>
+      <tr><td><code>DELETE</code></td><td>"Remove this"</td><td>Deleting a thing</td></tr>
+    </tbody>
+  </table>
+  <p>Your project's main endpoint uses <strong>POST</strong> because a payment is an <em>action that
+  changes the world</em> (it moves money). It is not just reading data. POST is the correct verb for
+  "process this payment". POST requests are also the kind that carry a <strong>request body</strong>
+  (explained below).</p>
+
+  <h4>API Endpoint</h4>
+  <p>An <strong>API</strong> (Application Programming Interface) is the set of "doors" a backend opens so
+  other programs can talk to it. Each individual door is an <strong>endpoint</strong> — a specific URL path
+  combined with an HTTP method. Your project has two endpoints:</p>
+  <ul>
+    <li><code>GET /</code> — a simple health check that returns the text "Idempotency Gateway running".</li>
+    <li><code>POST /process-payment</code> — the real endpoint that processes a payment.</li>
+  </ul>
+
+  <h4>REST API</h4>
+  <p><strong>REST</strong> (REpresentational State Transfer) is a popular <em>style</em> of designing APIs.
+  A REST API follows a few sensible conventions: it is organised around <em>resources</em> (things, named
+  by URLs), it uses the standard HTTP methods (GET/POST/PUT/DELETE) to act on them, it usually exchanges
+  data as JSON, and it uses HTTP status codes to report outcomes. Your project is a small REST API: it
+  exposes resources over HTTP, uses POST, speaks JSON, and returns proper status codes (200 and 409). When
+  the interviewer asks "is this RESTful?" you can say <em>yes, and explain those four points.</em></p>
+
+  <h4>Request Headers</h4>
+  <p>Every HTTP request has two parts: <strong>headers</strong> and a <strong>body</strong>. Headers are
+  short pieces of <em>metadata</em> — "data about the request" — written as name-value pairs. Think of
+  them like the information written on the <em>outside</em> of an envelope (sender, postage, handling
+  instructions), while the body is the letter <em>inside</em>.</p>
+  <p>Common headers include <code>Content-Type: application/json</code> (telling the server "my body is
+  written in JSON"). Your project uses a custom header, <code>Idempotency-Key</code>, to carry the
+  idempotency key. Putting the key in a <em>header</em> rather than in the body is intentional: the key is
+  metadata <em>about</em> the request, not part of the payment data itself — and it is the same design
+  Stripe uses.</p>
+
+  <h4>Request Body</h4>
+  <p>The <strong>request body</strong> is the main content the client sends — the actual data the server
+  needs to do its job. For your <code>POST /process-payment</code> endpoint, the body carries the payment
+  details: the amount and the currency.</p>
+
+  <h4>Response Body</h4>
+  <p>The <strong>response body</strong> is the main content the server sends <em>back</em>. In your
+  project it is a small JSON object containing a human-readable message, for example
+  <code>{ "message": "Charged 100.0 GHS" }</code>.</p>
+
+  <h4>JSON</h4>
+  <p><strong>JSON</strong> (JavaScript Object Notation) is a simple, text-based format for representing
+  structured data. It is the most common language for request and response bodies in modern web APIs
+  because it is easy for both humans and machines to read. It looks like this:</p>
+<pre><code>{
+  <span class="s">"amount"</span>: <span class="n">100</span>,
+  <span class="s">"currency"</span>: <span class="s">"GHS"</span>
+}</code></pre>
+  <p>JSON is built from <strong>key-value pairs</strong> wrapped in curly braces. The keys are text in
+  quotes (<code>"amount"</code>), and the values can be numbers (<code>100</code>), text
+  (<code>"GHS"</code>), true/false, lists, or nested objects. Your backend will automatically convert this
+  JSON text into a Java object, and convert Java objects back into JSON — you will see how in Phase 3 and
+  Phase 4.</p>
+
+  <h4>HTTP Status Codes</h4>
+  <p>Every HTTP response carries a three-digit <strong>status code</strong> that tells the client, at a
+  glance, what happened. They are grouped by their first digit:</p>
+  <table>
+    <thead><tr><th>Range</th><th>Meaning</th><th>Examples</th></tr></thead>
+    <tbody>
+      <tr><td><code>2xx</code></td><td>Success</td><td><strong>200 OK</strong> — everything worked</td></tr>
+      <tr><td><code>3xx</code></td><td>Redirection</td><td>301 Moved Permanently</td></tr>
+      <tr><td><code>4xx</code></td><td>Client error (the caller did something wrong)</td><td><strong>409 Conflict</strong>, 400 Bad Request, 404 Not Found</td></tr>
+      <tr><td><code>5xx</code></td><td>Server error (the server itself failed)</td><td>500 Internal Server Error</td></tr>
+    </tbody>
+  </table>
+  <p>Your project deliberately uses two status codes:</p>
+  <ul>
+    <li><strong>200 OK</strong> — for a successful payment, and also for a successful replay of an earlier
+    payment.</li>
+    <li><strong>409 Conflict</strong> — for the dangerous case where someone reuses an idempotency key but
+    sends a <em>different</em> payment body. 409 means "your request conflicts with something that already
+    exists" — it is exactly the right code, and choosing it correctly is a great thing to mention in the
+    interview.</li>
+  </ul>
+
+  <!-- ================= PHASE 2 ================= -->
+  <h2 class="phase" id="phase2">Phase 2 — Project Architecture</h2>
+
+  <h3>2.1 The Big Picture</h3>
+  <p>Your project is not one giant file. It is split into <strong>layers</strong>, where each layer has one
+  clear job and hands work to the next. This is called a <strong>layered architecture</strong>, and it is
+  one of the most important professional habits in backend engineering. Your project has four layers plus
+  the application entry point.</p>
+  <table>
+    <thead><tr><th>Layer</th><th>Package</th><th>Class(es)</th><th>Job</th></tr></thead>
+    <tbody>
+      <tr><td>Entry point</td><td><code>idempotency</code></td><td><code>IdempotencyApplication</code></td><td>Starts the whole Spring Boot app.</td></tr>
+      <tr><td>Controller layer</td><td><code>controller</code></td><td><code>PaymentController</code></td><td>Receives HTTP requests, returns HTTP responses.</td></tr>
+      <tr><td>Service layer</td><td><code>service</code></td><td><code>PaymentService</code></td><td>Holds the business logic (the idempotency rules).</td></tr>
+      <tr><td>Store layer</td><td><code>store</code></td><td><code>PaymentStore</code></td><td>Saves and retrieves data (the memory).</td></tr>
+      <tr><td>Model layer</td><td><code>model</code></td><td><code>PaymentRequests</code>, <code>PaymentResponse</code>, <code>StoredPayment</code>, <code>PaymentResult</code></td><td>Defines the shape of the data that moves between layers.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>2.2 The Controller Layer</h3>
+  <p>The <strong>controller</strong> is the front desk of your application. It is the only layer that knows
+  about the web — about HTTP, headers, status codes, and URLs. Its job is to: (1) receive an incoming HTTP
+  request, (2) pull out the useful pieces (the idempotency key from the header, the payment data from the
+  body), (3) hand those pieces to the service layer, and (4) take whatever the service returns and wrap it
+  into a proper HTTP response. The controller should contain <strong>no business logic</strong> — it is a
+  translator between "the web world" and "the Java world".</p>
+
+  <h3>2.3 The Service Layer</h3>
+  <p>The <strong>service</strong> is the brain of your application. This is where the actual <em>idempotency
+  rules</em> live. The service does not know or care that it was called over HTTP — it just receives a key
+  and a request object and decides what to do: is this a new payment, a duplicate replay, or a conflict?
+  Keeping logic here (and not in the controller) means the logic could be reused by a different kind of
+  caller — a scheduled job, a test, a command-line tool — without dragging HTTP along with it.</p>
+
+  <h3>2.4 The Store Layer</h3>
+  <p>The <strong>store</strong> is the memory of your application. HTTP is stateless — the server forgets
+  everything between requests — so to recognise a duplicate the server needs somewhere to remember past
+  payments. The store layer is that memory. In your project the store keeps everything in a
+  <code>ConcurrentHashMap</code> held in the computer's RAM. The important architectural idea is: the
+  service asks the store to "save this" or "find this" <em>without knowing how</em> the store does it.
+  Today it is a map in memory; tomorrow it could be swapped for a real database, and the service would not
+  change a single line. This is the power of separating the store into its own layer.</p>
+
+  <h3>2.5 The Model Layer</h3>
+  <p>The <strong>model</strong> layer is the vocabulary of your application. It contains plain Java classes
+  that describe the <em>shape</em> of your data — what a payment request looks like, what a response looks
+  like, what gets stored. These classes carry data between the other layers. They contain no logic; they
+  are simple data holders. Because their fields match the JSON structure, Spring can automatically convert
+  JSON into these objects and back.</p>
+
+  <h3>2.6 Why Packages Are Separated</h3>
+  <p>A <strong>package</strong> in Java is just a folder that groups related classes. Your project puts
+  each layer in its own package: <code>controller</code>, <code>service</code>, <code>store</code>,
+  <code>model</code>. Why bother?</p>
+  <ul>
+    <li><strong>Easy to find things.</strong> Need the web logic? Open <code>controller</code>. Need the
+    rules? Open <code>service</code>. The folder name tells you the job.</li>
+    <li><strong>Clear boundaries.</strong> The package structure makes the architecture <em>visible</em>.
+    A new developer understands the design just by looking at the folders.</li>
+    <li><strong>Controlled dependencies.</strong> Work flows in one direction: controller &rarr; service
+    &rarr; store. Separated packages make that flow obvious and discourage shortcuts.</li>
+  </ul>
+
+  <h3>2.7 What "Separation of Concerns" Means</h3>
+  <p>A "concern" is one responsibility — one job the software has to do. <strong>Separation of
+  concerns</strong> means each piece of code handles exactly one concern and does not mix in others.</p>
+  <p>In your project the concerns are cleanly separated: HTTP handling is the controller's concern; the
+  idempotency rules are the service's concern; remembering data is the store's concern; describing data is
+  the model's concern. None of them does another's job.</p>
+  <p>The opposite — doing everything in one giant class — produces what engineers call a "big ball of
+  mud": hard to read, hard to test, and dangerous to change because one edit can break something
+  unrelated.</p>
+
+  <h3>2.8 Why Clean Architecture Matters</h3>
+  <ul>
+    <li><strong>Testability:</strong> You can test the service's idempotency rules without starting a web
+    server, because the rules don't depend on HTTP.</li>
+    <li><strong>Changeability:</strong> Swap the in-memory store for a real database, or add a second
+    endpoint, and the change stays contained in one layer.</li>
+    <li><strong>Readability:</strong> Anyone can open the project and understand it, because each file is
+    small and has one obvious purpose.</li>
+    <li><strong>Teamwork:</strong> Different people can work on different layers at the same time without
+    colliding.</li>
+  </ul>
+
+  <h3>2.9 The Request Flow</h3>
+  <p>Here is the path a request travels through your project:</p>
+<pre class="flow"><code>   CLIENT  (Postman / curl / mobile app)
+   |
+   |  HTTP POST /process-payment
+   |  Header: Idempotency-Key: abc123
+   |  Body:   { "amount": 100, "currency": "GHS" }
+   v
++---------------------------------------------+
+|  PaymentController        (Controller Layer)|
+|   - reads the Idempotency-Key header        |
+|   - reads the JSON body into PaymentRequests|
+|   - calls paymentService.processPayment(...)|
++---------------------------------------------+
+   |
+   v
++---------------------------------------------+
+|  PaymentService              (Service Layer)|
+|   - asks the store: have I seen this key?   |
+|   - NEW key      -> wait 2s, build response,|
+|                     save it, return result |
+|   - SAME key+body-> return saved response   |
+|                     (cacheHit = true)       |
+|   - SAME key,                                |
+|     DIFFERENT body -> throw 409 Conflict     |
++---------------------------------------------+
+   |
+   v
++---------------------------------------------+
+|  PaymentStore                  (Store Layer)|
+|   - ConcurrentHashMap in memory             |
+|   - exists(key) / get(key) / save(key, ...) |
++---------------------------------------------+
+
+   RESPONSE travels back up:
+   Store -> Service -> Controller
+   |
+   |  HTTP 200 OK  { "message": "Charged 100.0 GHS" }
+   |  (replays also carry header X-Cache-Hit: true)
+   |  (key reused with different body -> HTTP 409)
+   v
+   CLIENT</code></pre>
+
+  <h3>2.10 Step By Step: What Happens When A Request Enters</h3>
+  <ol>
+    <li>The client sends an HTTP <code>POST</code> to <code>/process-payment</code> with the
+    <code>Idempotency-Key</code> header and a JSON body.</li>
+    <li>Spring Boot's embedded Tomcat web server receives the raw request and matches the URL and method
+    to the right controller method — <code>processPayment</code> in <code>PaymentController</code>.</li>
+    <li>Spring extracts the <code>Idempotency-Key</code> header value into the <code>String key</code>
+    parameter, and converts the JSON body into a <code>PaymentRequests</code> Java object.</li>
+    <li>The controller calls <code>paymentService.processPayment(key, request)</code>.</li>
+    <li>The service asks the store <code>exists(key)</code>. Three branches are possible:
+      <ul>
+        <li><strong>Key not found:</strong> sleep 2 seconds (simulated work), build a
+        <code>PaymentResponse</code>, wrap it with the request into a <code>StoredPayment</code>, save it
+        under the key, and return a <code>PaymentResult</code> with <code>cacheHit = false</code>.</li>
+        <li><strong>Key found, body matches:</strong> return a <code>PaymentResult</code> wrapping the
+        saved response with <code>cacheHit = true</code>.</li>
+        <li><strong>Key found, body differs:</strong> throw a <code>ResponseStatusException</code> with
+        status <code>409 Conflict</code>.</li>
+      </ul>
+    </li>
+    <li>The controller receives the <code>PaymentResult</code>. If <code>cacheHit</code> is true it returns
+    <code>200 OK</code> plus the <code>X-Cache-Hit: true</code> header; otherwise just <code>200 OK</code>.
+    If the service threw the 409 exception, Spring turns it into a <code>409 Conflict</code> response
+    automatically.</li>
+    <li>Spring converts the response object back into JSON, and Tomcat sends the HTTP response to the
+    client.</li>
+  </ol>
+
+  <!-- ================= PHASE 3 ================= -->
+  <h2 class="phase" id="phase3">Phase 3 — Spring Boot Fundamentals</h2>
+
+  <h3>3.1 What Is Spring Boot</h3>
+  <p>To understand Spring Boot, first understand <strong>Spring</strong>. Spring is a very large, very
+  popular <em>framework</em> for building Java applications. A framework is a collection of pre-written,
+  reusable code that solves the common, boring problems so you can focus on your actual feature. Plain
+  Spring, however, was historically hard to set up — it needed pages of configuration.</p>
+  <p><strong>Spring Boot</strong> is Spring with all the painful setup removed. Its philosophy is
+  "convention over configuration": it makes sensible default choices for you so you can start coding
+  features almost immediately. Spring Boot gives you:</p>
+  <ul>
+    <li><strong>Auto-configuration</strong> — it looks at what libraries you included and configures them
+    automatically.</li>
+    <li><strong>An embedded web server</strong> — you don't install a server separately; one is built into
+    your app.</li>
+    <li><strong>Starter dependencies</strong> — bundles of related libraries you add with one line.</li>
+    <li><strong>A simple entry point</strong> — one <code>main</code> method runs the whole thing.</li>
+  </ul>
+  <p>Your project uses Spring Boot version 4.0.6 with Java 17.</p>
+
+  <h3>3.2 What Is Maven</h3>
+  <p><strong>Maven</strong> is a <em>build tool</em> and <em>dependency manager</em> for Java projects. It
+  does two big jobs:</p>
+  <ul>
+    <li><strong>Dependency management:</strong> Your project depends on outside libraries (Spring Boot
+    itself, the web library, the test library). You do not download these by hand. You list them in a file
+    called <code>pom.xml</code>, and Maven automatically downloads them and all the libraries
+    <em>they</em> depend on.</li>
+    <li><strong>Building:</strong> Maven compiles your Java source code, runs your tests, and packages
+    everything into a runnable <code>.jar</code> file — all with one command.</li>
+  </ul>
+  <p>The <code>pom.xml</code> file (POM = Project Object Model) is the heart of a Maven project. It
+  declares the project's identity (<code>groupId</code>, <code>artifactId</code>, <code>version</code>),
+  its Java version, its parent, and its dependencies. Your project also includes the <strong>Maven
+  Wrapper</strong> (<code>mvnw</code> / <code>mvnw.cmd</code>) — a small script that lets anyone build the
+  project with the correct Maven version even if they don't have Maven installed. That is why the README
+  says <code>./mvnw spring-boot:run</code>.</p>
+
+  <h3>3.3 What Is Embedded Tomcat</h3>
+  <p>A <strong>web server</strong> is the software that actually listens on a network port, accepts
+  incoming HTTP requests, and sends HTTP responses. <strong>Tomcat</strong> is one of the most widely used
+  Java web servers.</p>
+  <p>Traditionally you would install Tomcat separately and then "deploy" your app into it. Spring Boot
+  changes this: it <strong>embeds</strong> Tomcat <em>inside</em> your application. When you run your
+  project, an entire Tomcat web server starts up automatically inside the same process and begins
+  listening — by default on <strong>port 8080</strong> (which is why your README's base URL is
+  <code>http://localhost:8080</code>). You did not write a single line of server code; Spring Boot's
+  auto-configuration set Tomcat up for you because your project includes the web starter dependency.</p>
+
+  <h3>3.4 What Is Dependency Injection</h3>
+  <p>This is the single most important Spring concept, so we go slowly.</p>
+  <p>Your classes need each other. <code>PaymentController</code> needs a <code>PaymentService</code> to do
+  its work. <code>PaymentService</code> needs a <code>PaymentStore</code>. The question is: <em>who creates
+  those objects?</em></p>
+  <p><strong>The bad way (without injection):</strong> each class builds its own helpers:</p>
+<pre><code><span class="c">// inside PaymentController -- the manual way</span>
+<span class="k">private final</span> <span class="t">PaymentService</span> paymentService = <span class="k">new</span> <span class="t">PaymentService</span>(<span class="k">new</span> <span class="t">PaymentStore</span>());</code></pre>
+  <p>This is bad because the controller is now permanently glued to those exact classes. It is hard to test
+  (you cannot substitute a fake service) and the wiring is duplicated everywhere.</p>
+  <p><strong>The Spring way (dependency injection):</strong> a class simply <em>declares what it
+  needs</em> in its constructor, and Spring <em>provides</em> it:</p>
+<pre><code><span class="c">// inside PaymentController -- the Spring way (your actual code)</span>
+<span class="k">private final</span> <span class="t">PaymentService</span> paymentService;
+
+<span class="k">public</span> <span class="t">PaymentController</span>(<span class="t">PaymentService</span> paymentService) {
+    <span class="k">this</span>.paymentService = paymentService;   <span class="c">// Spring passes it in</span>
+}</code></pre>
+  <p>Here is how it works. At startup Spring scans your project for classes marked as <em>components</em>
+  (with annotations like <code>@RestController</code>, <code>@Service</code>, <code>@Component</code>). For
+  each one it creates a single shared object and keeps it in a big internal registry called the
+  <strong>application context</strong> (sometimes called the "Spring container"). Each managed object is
+  called a <strong>bean</strong>.</p>
+  <p>When Spring needs to create your <code>PaymentController</code>, it sees the constructor asks for a
+  <code>PaymentService</code>. Spring looks in its registry, finds the <code>PaymentService</code> bean it
+  already built, and passes it in. The same happens for <code>PaymentService</code> needing a
+  <code>PaymentStore</code>. Spring "injects the dependencies" — hence the name.</p>
+  <p>A helpful analogy: dependency injection is like a restaurant kitchen. A chef (your controller) does
+  not go farm the vegetables. The chef just says "I need vegetables" and the supply system (Spring)
+  delivers them. The chef focuses on cooking. This is also called <strong>Inversion of Control</strong>:
+  control over object creation is inverted — handed from your code to the framework.</p>
+
+  <div class="callout interview">
+    <p><span class="label">Interview gold:</span> "I used constructor injection. My classes declare their
+    dependencies as constructor parameters and Spring supplies them at startup. This keeps the classes
+    loosely coupled and easy to test."</p>
+  </div>
+
+  <h3>3.5 What Are Annotations</h3>
+  <p>An <strong>annotation</strong> in Java is a special label, written with an <code>@</code> symbol, that
+  you attach to a class, method, or parameter. By itself an annotation does nothing — it is just a tag.
+  Its power comes from the fact that a framework can <em>read</em> these tags and change its behaviour
+  because of them.</p>
+  <p>Think of annotations as sticky notes you put on your code <em>for Spring to read</em>. The note
+  <code>@Service</code> says to Spring: "treat this class as a service component — create one and manage
+  it." Spring reads the note and acts on it. The annotations are how you communicate your intentions to
+  the framework.</p>
+
+  <h3>3.6 Every Annotation Used In This Project</h3>
+
+  <h4>@SpringBootApplication</h4>
+  <p>Placed on your main class, <code>IdempotencyApplication</code>. It is actually three annotations
+  bundled into one: (1) <code>@SpringBootConfiguration</code> — marks this as the configuration root;
+  (2) <code>@EnableAutoConfiguration</code> — turns on Spring Boot's automatic setup (this is what makes
+  Tomcat appear, etc.); (3) <code>@ComponentScan</code> — tells Spring to scan this package and all
+  sub-packages for component annotations. Because your main class sits in
+  <code>com.amlitech.idempotency</code>, Spring scans <code>controller</code>, <code>service</code>,
+  <code>store</code>, and <code>model</code> automatically.</p>
+
+  <h4>@RestController</h4>
+  <p>Placed on <code>PaymentController</code>. It tells Spring two things. First, "this class handles
+  incoming web requests" — so register its methods as endpoints. Second, "whatever these methods return
+  should be sent <em>directly</em> as the response body" — converted to JSON if it is an object. It is the
+  combination of two older annotations, <code>@Controller</code> + <code>@ResponseBody</code>.</p>
+
+  <h4>@Service</h4>
+  <p>Placed on <code>PaymentService</code>. Technically it does the same job as <code>@Component</code> —
+  it marks the class as a Spring-managed bean. But it carries <em>meaning</em>: it documents to any reader
+  "this class holds business logic; it belongs to the service layer." Spring will create one
+  <code>PaymentService</code> bean and inject it wherever a <code>PaymentService</code> is needed.</p>
+
+  <h4>@Component</h4>
+  <p>Placed on <code>PaymentStore</code>. <code>@Component</code> is the generic, most basic "this is a
+  Spring-managed bean" marker. <code>@Service</code>, <code>@RestController</code>, and
+  <code>@Repository</code> are all specialised versions of it. The store is marked with the plain
+  <code>@Component</code>; Spring creates one shared <code>PaymentStore</code> and injects it into
+  <code>PaymentService</code>.</p>
+
+  <h4>@GetMapping</h4>
+  <p>Placed on the <code>home()</code> method. It maps HTTP <code>GET</code> requests for a given URL path
+  to that method. <code>@GetMapping("/")</code> means "when a GET request arrives for the path
+  <code>/</code>, run this method."</p>
+
+  <h4>@PostMapping</h4>
+  <p>Placed on the <code>processPayment()</code> method. It maps HTTP <code>POST</code> requests for a path
+  to that method. <code>@PostMapping("/process-payment")</code> means "when a POST request arrives for
+  <code>/process-payment</code>, run this method." POST is correct here because processing a payment is an
+  action that changes state.</p>
+
+  <h4>@RequestHeader</h4>
+  <p>Placed on a method parameter. It tells Spring "fill this parameter with the value of a named HTTP
+  header." <code>@RequestHeader("Idempotency-Key") String key</code> means: read the
+  <code>Idempotency-Key</code> header from the incoming request and put its text into the <code>key</code>
+  variable. If the header is missing, Spring rejects the request automatically.</p>
+
+  <h4>@RequestBody</h4>
+  <p>Placed on a method parameter. It tells Spring "take the JSON in the request body and convert it into
+  this Java object." <code>@RequestBody PaymentRequests request</code> means: read the JSON body, and
+  using a library called Jackson, build a <code>PaymentRequests</code> object whose fields are filled from
+  the JSON. This automatic JSON-to-object conversion is called <strong>deserialization</strong>.</p>
+
+  <h4>ResponseEntity (a class, not an annotation)</h4>
+  <p><code>ResponseEntity</code> is a Spring class that represents a <em>complete</em> HTTP response: the
+  status code, the headers, <em>and</em> the body, all together. You use it when you want precise control
+  over the response — which your project does, because for a cache hit you must add the custom
+  <code>X-Cache-Hit</code> header. <code>ResponseEntity.ok(body)</code> builds a 200 OK response with that
+  body; <code>ResponseEntity.ok().header("X-Cache-Hit","true").body(...)</code> builds a 200 OK response
+  that also carries the extra header.</p>
+
+  <h3>3.7 How Spring Boot Starts (The Lifecycle)</h3>
+  <ol>
+    <li>You run the app. The JVM calls the <code>main</code> method in
+    <code>IdempotencyApplication</code>.</li>
+    <li><code>SpringApplication.run(...)</code> bootstraps Spring — it creates the application context (the
+    bean container).</li>
+    <li>Component scanning runs. Spring finds <code>PaymentController</code>, <code>PaymentService</code>,
+    <code>PaymentStore</code> by their annotations.</li>
+    <li>Spring creates the beans in dependency order: <code>PaymentStore</code> first, then
+    <code>PaymentService</code> (injecting the store), then <code>PaymentController</code> (injecting the
+    service).</li>
+    <li>Auto-configuration starts the embedded Tomcat server on port 8080.</li>
+    <li>The app is now live and waiting for HTTP requests.</li>
+  </ol>
+
+  <!-- ================= PHASE 4 ================= -->
+  <h2 class="phase" id="phase4">Phase 4 — Full Code Walkthrough</h2>
+  <p>Now we examine every file. For each one: what it is, why it exists, where it sits, who calls it, and
+  every line explained. We move in the order a request flows.</p>
+
+  <h3>4.1 pom.xml — The Project Definition</h3>
+  <p><strong>What it is:</strong> the Maven configuration file. It is not Java code; it is XML that
+  describes the project to the build tool. <strong>Why it exists:</strong> it tells Maven the project's
+  identity, which Java version to use, and which libraries to download. <strong>Where it fits:</strong> it
+  is the foundation — before any Java runs, Maven reads this to assemble the project.</p>
+<pre><code><span class="x">&lt;parent&gt;</span>
+    <span class="x">&lt;groupId&gt;</span>org.springframework.boot<span class="x">&lt;/groupId&gt;</span>
+    <span class="x">&lt;artifactId&gt;</span>spring-boot-starter-parent<span class="x">&lt;/artifactId&gt;</span>
+    <span class="x">&lt;version&gt;</span>4.0.6<span class="x">&lt;/version&gt;</span>
+<span class="x">&lt;/parent&gt;</span></code></pre>
+  <p>The <strong>parent</strong> says "inherit settings from Spring Boot's standard parent project,
+  version 4.0.6." This is what gives you sensible defaults and lets you list dependencies <em>without
+  writing their version numbers</em> — the parent already knows the correct, compatible versions.</p>
+
+<pre><code><span class="x">&lt;groupId&gt;</span>com.amlitech<span class="x">&lt;/groupId&gt;</span>
+<span class="x">&lt;artifactId&gt;</span>idempotency<span class="x">&lt;/artifactId&gt;</span>
+<span class="x">&lt;version&gt;</span>0.0.1-SNAPSHOT<span class="x">&lt;/version&gt;</span></code></pre>
+  <p>These three lines are the project's unique identity. <code>groupId</code> is the organisation,
+  <code>artifactId</code> is the project name, <code>version</code> is the version (<code>SNAPSHOT</code>
+  means "still in development").</p>
+
+<pre><code><span class="x">&lt;properties&gt;</span>
+    <span class="x">&lt;java.version&gt;</span>17<span class="x">&lt;/java.version&gt;</span>
+<span class="x">&lt;/properties&gt;</span></code></pre>
+  <p>Sets the Java version to <strong>17</strong> — a modern, long-term-support release.</p>
+
+<pre><code><span class="x">&lt;dependency&gt;</span>
+    <span class="x">&lt;groupId&gt;</span>org.springframework.boot<span class="x">&lt;/groupId&gt;</span>
+    <span class="x">&lt;artifactId&gt;</span>spring-boot-starter-webmvc<span class="x">&lt;/artifactId&gt;</span>
+<span class="x">&lt;/dependency&gt;</span></code></pre>
+  <p>This is the most important dependency. It is the <strong>web starter</strong> — a bundle that brings
+  in everything needed to build a REST API: Spring MVC (the request-routing engine), the embedded Tomcat
+  server, and Jackson (the JSON converter). One line, and your project can speak HTTP. (Note: in Spring
+  Boot 4 this starter is named <code>spring-boot-starter-webmvc</code>; in older versions it was
+  <code>spring-boot-starter-web</code> — mention this if asked.)</p>
+
+<pre><code><span class="x">&lt;dependency&gt;</span>
+    <span class="x">&lt;groupId&gt;</span>org.springframework.boot<span class="x">&lt;/groupId&gt;</span>
+    <span class="x">&lt;artifactId&gt;</span>spring-boot-devtools<span class="x">&lt;/artifactId&gt;</span>
+    <span class="x">&lt;scope&gt;</span>runtime<span class="x">&lt;/scope&gt;</span>
+    <span class="x">&lt;optional&gt;</span>true<span class="x">&lt;/optional&gt;</span>
+<span class="x">&lt;/dependency&gt;</span></code></pre>
+  <p><strong>DevTools</strong> is a developer-convenience library — it automatically restarts the app when
+  you change code, so you don't restart manually while developing.</p>
+
+<pre><code><span class="x">&lt;dependency&gt;</span>
+    <span class="x">&lt;groupId&gt;</span>org.springframework.boot<span class="x">&lt;/groupId&gt;</span>
+    <span class="x">&lt;artifactId&gt;</span>spring-boot-starter-webmvc-test<span class="x">&lt;/artifactId&gt;</span>
+    <span class="x">&lt;scope&gt;</span>test<span class="x">&lt;/scope&gt;</span>
+<span class="x">&lt;/dependency&gt;</span></code></pre>
+  <p>The <strong>test starter</strong> — brings in testing libraries (JUnit and Spring's test support).
+  <code>scope=test</code> means it is only used when running tests, never shipped in the final product.</p>
+
+<pre><code><span class="x">&lt;build&gt;</span>
+    <span class="x">&lt;plugins&gt;</span>
+        <span class="x">&lt;plugin&gt;</span>
+            <span class="x">&lt;groupId&gt;</span>org.springframework.boot<span class="x">&lt;/groupId&gt;</span>
+            <span class="x">&lt;artifactId&gt;</span>spring-boot-maven-plugin<span class="x">&lt;/artifactId&gt;</span>
+        <span class="x">&lt;/plugin&gt;</span>
+    <span class="x">&lt;/plugins&gt;</span>
+<span class="x">&lt;/build&gt;</span></code></pre>
+  <p>The <strong>Spring Boot Maven plugin</strong> — it packages your app into a single runnable JAR and
+  powers the <code>./mvnw spring-boot:run</code> command.</p>
+
+  <h3>4.2 IdempotencyApplication.java — The Entry Point</h3>
+  <p><strong>What it is:</strong> the class that starts your whole application. <strong>Why it
+  exists:</strong> every Java program needs a <code>main</code> method as its starting point; this is
+  yours. <strong>Where it fits:</strong> it sits at the top of the package tree so component scanning can
+  reach every other class. <strong>Who calls it:</strong> the Java Virtual Machine calls
+  <code>main</code>; nothing in your code calls it.</p>
+<pre><code><span class="k">package</span> com.amlitech.idempotency;
+
+<span class="k">import</span> org.springframework.boot.SpringApplication;
+<span class="k">import</span> org.springframework.boot.autoconfigure.SpringBootApplication;
+
+<span class="a">@SpringBootApplication</span>
+<span class="k">public class</span> <span class="t">IdempotencyApplication</span> {
+
+    <span class="k">public static void</span> main(<span class="t">String</span>[] args) {
+        <span class="t">SpringApplication</span>.run(<span class="t">IdempotencyApplication</span>.<span class="k">class</span>, args);
+    }
+
+}</code></pre>
+  <p><strong>Line by line:</strong></p>
+  <ul>
+    <li><code>package com.amlitech.idempotency;</code> — declares which package (folder) this class lives
+    in. This is the <em>root</em> package; everything else is below it.</li>
+    <li>The two <code>import</code> lines bring in the Spring classes this file uses:
+    <code>SpringApplication</code> (the launcher) and <code>SpringBootApplication</code> (the
+    annotation).</li>
+    <li><code>@SpringBootApplication</code> — the master annotation explained in Phase 3: it enables
+    auto-configuration and component scanning.</li>
+    <li><code>public class IdempotencyApplication</code> — declares the class. <code>public</code> means
+    visible everywhere.</li>
+    <li><code>public static void main(String[] args)</code> — the standard Java entry point.
+    <code>static</code> means it can run without creating an object first; <code>void</code> means it
+    returns nothing; <code>args</code> holds any command-line arguments.</li>
+    <li><code>SpringApplication.run(IdempotencyApplication.class, args);</code> — the one line that does
+    everything: it starts Spring, builds the application context, creates all beans, and launches embedded
+    Tomcat. After this line, your app is alive.</li>
+  </ul>
+
+  <h3>4.3 The Model Layer — The Data Shapes</h3>
+  <p>We explain the models before the controller and service, because the controller and service
+  constantly use them — you need this vocabulary first. All four are <strong>POJOs</strong> (Plain Old
+  Java Objects): simple classes with private fields, a no-argument constructor, and getters/setters. They
+  contain data, not logic.</p>
+
+  <h4>Why getters, setters, and a no-arg constructor?</h4>
+  <p>Two reasons. First, <strong>encapsulation</strong> — a core object-oriented principle: fields are
+  kept <code>private</code> so outside code cannot touch them directly; access goes through
+  <code>getX()</code> (read) and <code>setX()</code> (write) methods. This gives the class control over
+  its own data. Second, <strong>Jackson</strong> — the JSON library Spring uses — needs a no-argument
+  constructor to create an empty object, and then calls the setters to fill in each field from the JSON.
+  So this pattern is what makes automatic JSON conversion possible.</p>
+
+  <h4>4.3.1 PaymentRequests.java — the incoming data</h4>
+  <p><strong>What it is:</strong> a model that represents the payment data the client sends. <strong>Why
+  it exists:</strong> the JSON body <code>{ "amount": 100, "currency": "GHS" }</code> needs a matching
+  Java shape to be converted into. <strong>Who uses it:</strong> Spring builds one from the request body
+  via <code>@RequestBody</code>; the service reads it.</p>
+<pre><code><span class="k">package</span> com.amlitech.idempotency.model;
+
+<span class="k">public class</span> <span class="t">PaymentRequests</span> {
+
+    <span class="k">private double</span> amount;
+    <span class="k">private</span> <span class="t">String</span> currency;
+
+    <span class="k">public</span> <span class="t">PaymentRequests</span>() {
+    }
+
+    <span class="k">public double</span> getAmount() { <span class="k">return</span> amount; }
+    <span class="k">public void</span> setAmount(<span class="k">double</span> amount) { <span class="k">this</span>.amount = amount; }
+
+    <span class="k">public</span> <span class="t">String</span> getCurrency() { <span class="k">return</span> currency; }
+    <span class="k">public void</span> setCurrency(<span class="t">String</span> currency) { <span class="k">this</span>.currency = currency; }
+}</code></pre>
+  <ul>
+    <li><code>private double amount;</code> — the payment amount. <code>double</code> is a number type that
+    allows decimals (e.g. 100.0, 49.99).</li>
+    <li><code>private String currency;</code> — the currency code, e.g. "GHS", as text.</li>
+    <li>The empty constructor <code>PaymentRequests(){}</code> — required by Jackson to create the object
+    before filling it.</li>
+    <li>The getters and setters — Jackson sees the JSON key <code>"amount"</code> and calls
+    <code>setAmount(100)</code>; it sees <code>"currency"</code> and calls <code>setCurrency("GHS")</code>.
+    The field names <em>match</em> the JSON keys, which is how the mapping works.</li>
+  </ul>
+  <div class="callout honest">
+    <p><span class="label">Honest detail to mention if asked:</span> the class name is plural
+    ("PaymentRequests") although it represents a single request — "PaymentRequest" would read more
+    naturally. It is purely a naming choice and does not affect behaviour.</p>
+  </div>
+
+  <h4>4.3.2 PaymentResponse.java — the outgoing data</h4>
+  <p><strong>What it is:</strong> the model that represents the answer sent back to the client.
+  <strong>Why it exists:</strong> the client expects a JSON reply like
+  <code>{ "message": "Charged 100.0 GHS" }</code>; this class is its Java shape. <strong>Who uses
+  it:</strong> the service creates it; Spring converts it back into JSON for the response body.</p>
+<pre><code><span class="k">package</span> com.amlitech.idempotency.model;
+
+<span class="k">public class</span> <span class="t">PaymentResponse</span> {
+
+    <span class="k">private</span> <span class="t">String</span> message;
+
+    <span class="k">public</span> <span class="t">PaymentResponse</span>() {}
+
+    <span class="k">public</span> <span class="t">PaymentResponse</span>(<span class="t">String</span> message) {
+        <span class="k">this</span>.message = message;
+    }
+
+    <span class="k">public</span> <span class="t">String</span> getMessage() { <span class="k">return</span> message; }
+    <span class="k">public void</span> setMessage(<span class="t">String</span> message) { <span class="k">this</span>.message = message; }
+}</code></pre>
+  <ul>
+    <li><code>private String message;</code> — the single field, a human-readable result text.</li>
+    <li>It has <strong>two</strong> constructors. The empty one is for Jackson. The second,
+    <code>PaymentResponse(String message)</code>, is a convenience the service uses to build a response in
+    one line: <code>new PaymentResponse("Charged 100.0 GHS")</code>.</li>
+    <li>When this object is returned, Jackson reads <code>getMessage()</code> and produces the JSON
+    <code>{ "message": "..." }</code>. Turning an object into JSON is called
+    <strong>serialization</strong> — the opposite of deserialization.</li>
+  </ul>
+
+  <h4>4.3.3 StoredPayment.java — the saved record</h4>
+  <p><strong>What it is:</strong> a model that bundles together <em>both</em> the original request and the
+  response that was produced. <strong>Why it exists:</strong> this is the heart of idempotency. To handle
+  a duplicate correctly the store must remember two things: (1) the response, so it can replay it; and
+  (2) the original request body, so it can check a retry truly matches and is not a different payment
+  reusing the key. <code>StoredPayment</code> holds both. <strong>Who uses it:</strong> the service
+  creates it and saves it; the store keeps it; the service reads it back on a duplicate.</p>
+<pre><code><span class="k">package</span> com.amlitech.idempotency.model;
+
+<span class="k">public class</span> <span class="t">StoredPayment</span> {
+
+    <span class="k">private</span> <span class="t">PaymentRequests</span> request;
+    <span class="k">private</span> <span class="t">PaymentResponse</span> response;
+
+    <span class="k">public</span> <span class="t">StoredPayment</span>() {}
+
+    <span class="k">public</span> <span class="t">StoredPayment</span>(<span class="t">PaymentResponse</span> response, <span class="t">PaymentRequests</span> request) {
+        <span class="k">this</span>.response = response;
+        <span class="k">this</span>.request = request;
+    }
+
+    <span class="k">public</span> <span class="t">PaymentRequests</span> getRequest() { <span class="k">return</span> request; }
+    <span class="k">public void</span> setRequest(<span class="t">PaymentRequests</span> request) { <span class="k">this</span>.request = request; }
+
+    <span class="k">public</span> <span class="t">PaymentResponse</span> getResponse() { <span class="k">return</span> response; }
+    <span class="k">public void</span> setResponse(<span class="t">PaymentResponse</span> response) { <span class="k">this</span>.response = response; }
+}</code></pre>
+  <ul>
+    <li><code>private PaymentRequests request;</code> — the original request, kept so future retries can be
+    compared against it.</li>
+    <li><code>private PaymentResponse response;</code> — the response that was generated, kept so it can be
+    replayed instantly.</li>
+    <li>The constructor takes both and stores them. Notice the parameter order is
+    <code>(response, request)</code> — be careful and consistent when calling it.</li>
+  </ul>
+
+  <h4>4.3.4 PaymentResult.java — the internal carrier</h4>
+  <p><strong>What it is:</strong> a small model used <em>only inside the application</em> to carry two
+  things from the service back to the controller: the response, and a true/false flag saying whether this
+  was a cache hit (a replay). <strong>Why it exists:</strong> the controller needs to know whether to add
+  the <code>X-Cache-Hit</code> header. The <code>PaymentResponse</code> alone cannot tell it that.
+  <code>PaymentResult</code> wraps the response together with the <code>cacheHit</code> flag. <strong>Who
+  uses it:</strong> the service returns it; the controller reads it. It is never converted to JSON itself
+  — only its inner <code>response</code> is.</p>
+<pre><code><span class="k">package</span> com.amlitech.idempotency.model;
+
+<span class="k">public class</span> <span class="t">PaymentResult</span> {
+
+    <span class="k">private</span> <span class="t">PaymentResponse</span> response;
+    <span class="k">private boolean</span> cacheHit;
+
+    <span class="k">public</span> <span class="t">PaymentResult</span>() {}
+
+    <span class="k">public</span> <span class="t">PaymentResult</span>(<span class="t">PaymentResponse</span> response, <span class="k">boolean</span> cacheHit) {
+        <span class="k">this</span>.response = response;
+        <span class="k">this</span>.cacheHit = cacheHit;
+    }
+
+    <span class="k">public</span> <span class="t">PaymentResponse</span> getResponse() { <span class="k">return</span> response; }
+    <span class="k">public void</span> setResponse(<span class="t">PaymentResponse</span> response) { <span class="k">this</span>.response = response; }
+
+    <span class="k">public boolean</span> isCacheHit() { <span class="k">return</span> cacheHit; }
+    <span class="k">public void</span> setCacheHit(<span class="k">boolean</span> cacheHit) { <span class="k">this</span>.cacheHit = cacheHit; }
+}</code></pre>
+  <ul>
+    <li><code>private PaymentResponse response;</code> — the actual answer for the client.</li>
+    <li><code>private boolean cacheHit;</code> — a boolean (true/false) flag. <code>true</code> means "this
+    answer is a replay of a stored payment"; <code>false</code> means "this is a freshly processed
+    payment."</li>
+    <li>Notice the getter for the boolean is <code>isCacheHit()</code>, not <code>getCacheHit()</code>. By
+    Java convention, boolean getters start with <code>is</code>.</li>
+  </ul>
+  <div class="callout interview">
+    <p><span class="label">Design point worth saying aloud:</span> "I separated <code>PaymentResult</code>
+    from <code>PaymentResponse</code> so that the cache-hit flag — which is internal control information —
+    never leaks into the JSON the client sees. The client gets a clean response; the controller gets the
+    extra flag it needs."</p>
+  </div>
+
+  <h3>4.4 PaymentStore.java — The Memory Layer</h3>
+  <p><strong>What it is:</strong> the class that stores and retrieves payment records. <strong>Why it
+  exists:</strong> HTTP is stateless — without a store the server cannot recognise a duplicate key. This
+  class <em>is</em> the server's memory. <strong>Where it fits:</strong> the lowest layer; nothing is
+  below it. <strong>Who calls it:</strong> only <code>PaymentService</code>. <strong>Who it calls:</strong>
+  nothing — it just manages a map.</p>
+<pre><code><span class="k">package</span> com.amlitech.idempotency.store;
+
+<span class="k">import</span> com.amlitech.idempotency.model.PaymentResponse;
+<span class="k">import</span> com.amlitech.idempotency.model.StoredPayment;
+<span class="k">import</span> org.springframework.stereotype.Component;
+<span class="k">import</span> java.util.concurrent.ConcurrentHashMap;
+
+<span class="a">@Component</span>
+<span class="k">public class</span> <span class="t">PaymentStore</span> {
+
+    <span class="k">private final</span> <span class="t">ConcurrentHashMap</span>&lt;<span class="t">String</span>, <span class="t">StoredPayment</span>&gt; store = <span class="k">new</span> <span class="t">ConcurrentHashMap</span>&lt;&gt;();
+
+    <span class="k">public</span> <span class="t">StoredPayment</span> get(<span class="t">String</span> key) {
+        <span class="k">return</span> store.get(key);
+    }
+
+    <span class="k">public void</span> save(<span class="t">String</span> key, <span class="t">StoredPayment</span> payment) {
+        store.put(key, payment);
+    }
+
+    <span class="k">public boolean</span> exists(<span class="t">String</span> key) {
+        <span class="k">return</span> store.containsKey(key);
+    }
+}</code></pre>
+  <p><strong>The imports:</strong> <code>StoredPayment</code> is the value type the map holds;
+  <code>Component</code> is the Spring annotation; <code>ConcurrentHashMap</code> is the data structure.
+  (<code>PaymentResponse</code> is imported but not actually used — a harmless leftover.)</p>
+  <p><code>@Component</code> — marks this as a Spring bean. Spring creates one shared
+  <code>PaymentStore</code> at startup and injects it into <code>PaymentService</code>. Because there is
+  exactly one shared instance, there is exactly one shared memory — which is what you want.</p>
+  <p><strong>The field:</strong></p>
+  <ul>
+    <li>A <strong>Map</strong> is a dictionary-like structure of <em>key &rarr; value</em> pairs. Here the
+    key is a <code>String</code> (the idempotency key) and the value is a <code>StoredPayment</code> (the
+    saved record).</li>
+    <li><code>final</code> means the <code>store</code> variable will always point to this same map — you
+    can change what is <em>inside</em> the map, but you cannot replace the map itself. This prevents
+    accidental bugs.</li>
+    <li>It is created immediately with <code>new ConcurrentHashMap&lt;&gt;()</code>, so the store is ready
+    the moment the bean exists.</li>
+  </ul>
+
+  <h4>Why ConcurrentHashMap and not a plain HashMap?</h4>
+  <p>This is a key interview point. A web server is <strong>multi-threaded</strong> — it handles many
+  requests at the same time, each on its own thread. Two requests could try to read and write the map at
+  the very same instant.</p>
+  <p>A plain <code>HashMap</code> is <strong>not thread-safe</strong>: simultaneous access can corrupt its
+  internal structure, causing wrong results or even crashes. A <code>ConcurrentHashMap</code> is
+  <strong>thread-safe</strong> — it is specifically designed for many threads to use it at once, safely
+  and efficiently. Since your gateway is exactly the kind of system that receives bursts of concurrent
+  (often duplicate) requests, <code>ConcurrentHashMap</code> is the correct, deliberate choice.</p>
+
+  <h4>The three methods</h4>
+  <ul>
+    <li><code>get(String key)</code> — <strong>input:</strong> a key. <strong>output:</strong> the
+    <code>StoredPayment</code> saved under it, or <code>null</code> if nothing is there. It simply
+    delegates to <code>store.get(key)</code>.</li>
+    <li><code>save(String key, StoredPayment payment)</code> — <strong>input:</strong> a key and a record.
+    <strong>output:</strong> none (<code>void</code>). It calls <code>store.put(key, payment)</code> to
+    insert or overwrite the entry.</li>
+    <li><code>exists(String key)</code> — <strong>input:</strong> a key. <strong>output:</strong> a
+    <code>boolean</code> — <code>true</code> if the map already contains that key, <code>false</code>
+    otherwise. It calls <code>store.containsKey(key)</code>. This is the method the service uses to decide
+    "new payment or duplicate?"</li>
+  </ul>
+
+  <h4>Why in-memory storage instead of a database?</h4>
+  <p>The store keeps data in RAM, in the map. A real production system would use a fast database such as
+  <strong>Redis</strong> (with an expiry time on each key). For this project, in-memory was chosen
+  because: it keeps the project simple and focused on demonstrating the <em>idempotency logic itself</em>,
+  not database setup; it is extremely fast; and it requires no external software to run or grade. The
+  honest trade-off, which you should state proudly because it shows awareness: <strong>in-memory data is
+  lost when the app restarts</strong>, and it is not shared if you run several copies of the app. Because
+  the store is its own isolated layer, upgrading to Redis later would change only this one file — the
+  service and controller would not change at all.</p>
+
+  <h3>4.5 PaymentService.java — The Brain</h3>
+  <p><strong>What it is:</strong> the class holding the idempotency business logic. <strong>Why it
+  exists:</strong> to keep the decision-making rules in one focused place, separate from web concerns.
+  <strong>Where it fits:</strong> the middle layer. <strong>Who calls it:</strong>
+  <code>PaymentController</code>. <strong>Who it calls:</strong> <code>PaymentStore</code>.</p>
+<pre><code><span class="k">package</span> com.amlitech.idempotency.service;
+
+<span class="k">import</span> com.amlitech.idempotency.model.PaymentRequests;
+<span class="k">import</span> com.amlitech.idempotency.model.PaymentResponse;
+<span class="k">import</span> com.amlitech.idempotency.model.PaymentResult;
+<span class="k">import</span> com.amlitech.idempotency.model.StoredPayment;
+<span class="k">import</span> com.amlitech.idempotency.store.PaymentStore;
+<span class="k">import</span> org.springframework.http.HttpStatus;
+<span class="k">import</span> org.springframework.stereotype.Service;
+<span class="k">import</span> org.springframework.web.server.ResponseStatusException;
+
+<span class="a">@Service</span>
+<span class="k">public class</span> <span class="t">PaymentService</span> {
+
+    <span class="k">private final</span> <span class="t">PaymentStore</span> paymentStore;
+
+    <span class="k">public</span> <span class="t">PaymentService</span>(<span class="t">PaymentStore</span> paymentStore) {
+        <span class="k">this</span>.paymentStore = paymentStore;
+    }</code></pre>
+  <p><strong>The imports</strong> bring in the four model classes, the <code>PaymentStore</code>, and three
+  Spring items: <code>HttpStatus</code> (an enum of HTTP status codes), <code>Service</code> (the
+  annotation), and <code>ResponseStatusException</code> (an exception that carries an HTTP status).</p>
+  <p><code>@Service</code> — marks this as a Spring-managed service bean.</p>
+  <p><strong>The field and constructor</strong> — this is constructor-based dependency injection. The
+  service declares <code>private final PaymentStore paymentStore;</code> and receives it through the
+  constructor. Spring sees the constructor needs a <code>PaymentStore</code>, finds the one bean it
+  created, and passes it in. <code>final</code> guarantees the reference never changes after
+  construction.</p>
+
+  <h4>The processPayment method — the core of the whole project</h4>
+<pre><code><span class="k">public</span> <span class="t">PaymentResult</span> processPayment(<span class="t">String</span> key, <span class="t">PaymentRequests</span> requests) {
+
+    <span class="k">if</span> (paymentStore.exists(key)) {
+
+        <span class="t">StoredPayment</span> saved = paymentStore.get(key);
+
+        <span class="k">if</span> (saved.getRequest().getAmount() == requests.getAmount()
+                && saved.getRequest().getCurrency().equals(requests.getCurrency())) {
+
+            <span class="k">return new</span> <span class="t">PaymentResult</span>(saved.getResponse(), <span class="k">true</span>);
+
+        } <span class="k">else</span> {
+
+            <span class="k">throw new</span> <span class="t">ResponseStatusException</span>(
+                <span class="t">HttpStatus</span>.CONFLICT,
+                <span class="s">"Idempotency key already used for a different request body."</span>
+            );
+        }
+    }
+
+    <span class="k">try</span> {
+        <span class="t">Thread</span>.sleep(<span class="n">2000</span>);
+    } <span class="k">catch</span> (<span class="t">InterruptedException</span> e) {
+        e.printStackTrace();
+    }
+
+    <span class="t">PaymentResponse</span> response = <span class="k">new</span> <span class="t">PaymentResponse</span>(
+        <span class="s">"Charged "</span> + requests.getAmount() + <span class="s">" "</span> + requests.getCurrency());
+
+    <span class="t">StoredPayment</span> payment = <span class="k">new</span> <span class="t">StoredPayment</span>(response, requests);
+
+    paymentStore.save(key, payment);
+
+    <span class="k">return new</span> <span class="t">PaymentResult</span>(response, <span class="k">false</span>);
+}</code></pre>
+  <p><strong>Inputs:</strong> <code>key</code> (the idempotency key from the header) and
+  <code>requests</code> (the payment data from the body). <strong>Output:</strong> a
+  <code>PaymentResult</code> — <em>or</em> a thrown <code>409</code> exception.</p>
+  <p>Now line by line:</p>
+  <ul>
+    <li><code>if(paymentStore.exists(key))</code> — the very first decision: <strong>have I seen this key
+    before?</strong> If yes, we are in the "duplicate" branch. If no, we skip to the "new payment" branch
+    lower down.</li>
+    <li><strong>Inside the duplicate branch:</strong> <code>StoredPayment saved =
+    paymentStore.get(key);</code> — fetch the record we saved last time, so we can compare and replay
+    it.</li>
+    <li>The inner <code>if</code> is the <strong>conflict check</strong>. It compares the saved request
+    with the new one on two fields:
+      <ul>
+        <li><code>saved.getRequest().getAmount() == requests.getAmount()</code> — do the amounts match?
+        <code>==</code> compares the two <code>double</code> numbers.</li>
+        <li><code>saved.getRequest().getCurrency().equals(requests.getCurrency())</code> — do the
+        currencies match? Note: <code>String</code> values must be compared with <code>.equals()</code>,
+        never <code>==</code>, because <code>==</code> would compare object identity rather than text
+        content. Using <code>.equals()</code> here is correct.</li>
+        <li>The <code>&&</code> means <strong>both</strong> conditions must be true for the bodies to be
+        considered "the same".</li>
+      </ul>
+    </li>
+    <li><strong>If both match</strong> — this is a genuine retry of the same payment.
+    <code>return new PaymentResult(saved.getResponse(), true);</code> — return the <em>stored</em> response
+    with <code>cacheHit = true</code>. Crucially: <strong>no charge happens, no 2-second sleep
+    happens.</strong> The reply is instant. This is the "cache hit" / "replay" behaviour.</li>
+    <li><strong>If they do not match</strong> — someone reused a key that already belongs to a different
+    payment. That is a dangerous mistake, so we refuse:
+    <code>throw new ResponseStatusException(HttpStatus.CONFLICT, "...")</code>. Throwing this exception
+    immediately stops the method. Spring catches it and turns it into an HTTP <strong>409 Conflict</strong>
+    response with that message. This protects against a client bug or a misuse where one key would
+    otherwise mask a totally different transaction.</li>
+    <li><strong>The new-payment branch</strong> (only reached when the key was <em>not</em> found):
+      <ul>
+        <li><code>Thread.sleep(2000);</code> — pauses this thread for 2000 milliseconds (2 seconds). This
+        is a <strong>deliberate simulation</strong> of slow, real payment work (contacting a bank, etc.).
+        It also makes the demo realistic: it creates the very window of time in which a client would time
+        out and retry — so you can <em>show</em> the idempotency working.</li>
+        <li>It is wrapped in <code>try/catch</code> because <code>Thread.sleep</code> can throw a checked
+        <code>InterruptedException</code>, which Java forces you to handle. The <code>catch</code> simply
+        prints the error trace.</li>
+        <li><code>PaymentResponse response = new PaymentResponse("Charged " + requests.getAmount() + " " +
+        requests.getCurrency());</code> — builds the success message by joining text with the amount and
+        currency, e.g. <code>"Charged 100.0 GHS"</code>.</li>
+        <li><code>StoredPayment payment = new StoredPayment(response, requests);</code> — bundles the
+        response together with the original request into one record.</li>
+        <li><code>paymentStore.save(key, payment);</code> — <strong>saves the record under the key.</strong>
+        This is the single most important line for idempotency: it is what gives the server its memory.
+        From this moment on, any retry with this key will be recognised as a duplicate.</li>
+        <li><code>return new PaymentResult(response, false);</code> — returns the fresh response with
+        <code>cacheHit = false</code> (this was a real, first-time charge).</li>
+      </ul>
+    </li>
+  </ul>
+  <div class="callout interview">
+    <p><span class="label">The whole method in one sentence:</span> "If the key is new, do the real work,
+    save it, and report a fresh charge; if the key is known and the body matches, replay the saved answer
+    for free; if the key is known but the body differs, reject with 409."</p>
+  </div>
+
+  <h3>4.6 PaymentController.java — The Front Desk</h3>
+  <p><strong>What it is:</strong> the class that exposes the HTTP endpoints. <strong>Why it exists:</strong>
+  to be the bridge between the web and the service layer. <strong>Where it fits:</strong> the top layer,
+  closest to the client. <strong>Who calls it:</strong> Spring (which is triggered by an incoming HTTP
+  request). <strong>Who it calls:</strong> <code>PaymentService</code>.</p>
+<pre><code><span class="k">package</span> com.amlitech.idempotency.controller;
+
+<span class="k">import</span> com.amlitech.idempotency.model.PaymentRequests;
+<span class="k">import</span> com.amlitech.idempotency.model.PaymentResponse;
+<span class="k">import</span> com.amlitech.idempotency.model.PaymentResult;
+<span class="k">import</span> com.amlitech.idempotency.service.PaymentService;
+<span class="k">import</span> org.springframework.http.ResponseEntity;
+<span class="k">import</span> org.springframework.web.bind.annotation.*;
+
+<span class="a">@RestController</span>
+<span class="k">public class</span> <span class="t">PaymentController</span> {
+
+    <span class="k">private final</span> <span class="t">PaymentService</span> paymentService;
+
+    <span class="k">public</span> <span class="t">PaymentController</span>(<span class="t">PaymentService</span> paymentService) {
+        <span class="k">this</span>.paymentService = paymentService;
+    }
+
+    <span class="a">@GetMapping</span>(<span class="s">"/"</span>)
+    <span class="k">public</span> <span class="t">String</span> home() {
+        <span class="k">return</span> <span class="s">"Idempotency Gateway running"</span>;
+    }
+
+    <span class="a">@PostMapping</span>(<span class="s">"/process-payment"</span>)
+    <span class="k">public</span> <span class="t">ResponseEntity</span>&lt;<span class="t">PaymentResponse</span>&gt; processPayment(
+            <span class="a">@RequestHeader</span>(<span class="s">"Idempotency-Key"</span>) <span class="t">String</span> key,
+            <span class="a">@RequestBody</span> <span class="t">PaymentRequests</span> request) {
+
+        <span class="t">PaymentResult</span> result = paymentService.processPayment(key, request);
+
+        <span class="k">if</span> (result.isCacheHit()) {
+            <span class="k">return</span> <span class="t">ResponseEntity</span>.ok()
+                    .header(<span class="s">"X-Cache-Hit"</span>, <span class="s">"true"</span>)
+                    .body(result.getResponse());
+        }
+
+        <span class="k">return</span> <span class="t">ResponseEntity</span>.ok(result.getResponse());
+    }
+}</code></pre>
+  <p><strong>The imports</strong> bring in the models it uses, the <code>PaymentService</code>,
+  <code>ResponseEntity</code>, and (with the <code>*</code> wildcard) all the web annotations.</p>
+  <p><code>@RestController</code> — marks this as a REST controller: its methods become HTTP endpoints, and
+  their return values become the response body.</p>
+  <p><strong>Field and constructor</strong> — constructor injection again: the controller declares it
+  needs a <code>PaymentService</code>, and Spring injects the service bean.</p>
+  <p><strong>The <code>home()</code> method:</strong></p>
+  <ul>
+    <li><code>@GetMapping("/")</code> — handles <code>GET /</code>.</li>
+    <li>It returns the plain string <code>"Idempotency Gateway running"</code>. This is a simple
+    <strong>health check</strong> — you can open <code>http://localhost:8080/</code> in a browser and
+    instantly confirm the app is up.</li>
+  </ul>
+  <p><strong>The <code>processPayment()</code> method — the real endpoint:</strong></p>
+  <ul>
+    <li><code>@PostMapping("/process-payment")</code> — handles <code>POST /process-payment</code>.</li>
+    <li>Return type <code>ResponseEntity&lt;PaymentResponse&gt;</code> — it returns a full HTTP response
+    whose body is a <code>PaymentResponse</code>. <code>ResponseEntity</code> is used (instead of returning
+    the object directly) because the controller needs to control the headers.</li>
+    <li><code>@RequestHeader("Idempotency-Key") String key</code> — Spring reads the
+    <code>Idempotency-Key</code> header and gives its text to <code>key</code>. If the header is missing,
+    Spring returns a <code>400 Bad Request</code> automatically — the key is mandatory.</li>
+    <li><code>@RequestBody PaymentRequests request</code> — Spring converts the JSON body into a
+    <code>PaymentRequests</code> object via Jackson (deserialization).</li>
+    <li><code>PaymentResult result = paymentService.processPayment(key, request);</code> — the controller
+    delegates <strong>all the thinking</strong> to the service. Notice the controller itself contains no
+    idempotency logic — that is separation of concerns in action. If the service throws the 409 exception,
+    the controller never reaches the next line; Spring handles it.</li>
+    <li><code>if (result.isCacheHit())</code> — checks the flag the service set. If it is a replay:
+      <ul>
+        <li><code>ResponseEntity.ok()</code> — start building a 200 OK response.</li>
+        <li><code>.header("X-Cache-Hit", "true")</code> — attach the custom header signalling "this is a
+        replayed response, not a fresh charge."</li>
+        <li><code>.body(result.getResponse())</code> — set the body to the stored
+        <code>PaymentResponse</code>.</li>
+      </ul>
+    </li>
+    <li><code>return ResponseEntity.ok(result.getResponse());</code> — the normal path: a fresh payment
+    returns a plain 200 OK with the response body and <em>no</em> <code>X-Cache-Hit</code> header.</li>
+  </ul>
+
+  <h3>4.7 application.properties — Configuration</h3>
+  <p><strong>What it is:</strong> Spring Boot's configuration file. <strong>Why it exists:</strong> to hold
+  settings without hard-coding them in Java.</p>
+<pre><code>spring.application.name=idempotency</code></pre>
+  <p>It currently sets only the application's name. Everything else — the port 8080, the JSON converter,
+  Tomcat — runs on Spring Boot's defaults. (If you ever wanted a different port you would add
+  <code>server.port=9090</code> here.)</p>
+
+  <h3>4.8 IdempotencyApplicationTests.java — The Test</h3>
+<pre><code><span class="a">@SpringBootTest</span>
+<span class="k">class</span> <span class="t">IdempotencyApplicationTests</span> {
+
+    <span class="a">@Test</span>
+    <span class="k">void</span> contextLoads() {
+    }
+
+}</code></pre>
+  <p><strong>What it is:</strong> the default test class generated by Spring Initializr.
+  <code>@SpringBootTest</code> tells the test framework to start the full Spring application context. The
+  single <code>@Test</code> method <code>contextLoads()</code> is empty on purpose: if the application
+  context fails to start (a broken bean, a misconfiguration), this test fails. So it is a basic
+  <strong>smoke test</strong> — it proves the app can boot. It does not yet test the idempotency logic
+  itself; adding such tests would be a natural next improvement (see Phase 6).</p>
+
+  <!-- ================= PHASE 5 ================= -->
+  <h2 class="phase" id="phase5">Phase 5 — Request Flow Simulation</h2>
+  <p>We now trace three real scenarios through the actual code, line by line, including what happens in
+  memory.</p>
+
+  <h3>Scenario 1 — The First Payment Request</h3>
+  <p><strong>The request the client sends:</strong></p>
+<pre><code>POST /process-payment  HTTP/1.1
+Host: localhost:8080
+Content-Type: application/json
+Idempotency-Key: abc123
+
+{
+  "amount": 100,
+  "currency": "GHS"
+}</code></pre>
+  <p><strong>The code path:</strong></p>
+  <ol>
+    <li>Tomcat receives the POST and routes it to <code>PaymentController.processPayment</code>.</li>
+    <li>Spring fills <code>key = "abc123"</code> from the header, and builds <code>request</code> as a
+    <code>PaymentRequests</code> with <code>amount = 100.0</code>, <code>currency = "GHS"</code>.</li>
+    <li>The controller calls <code>paymentService.processPayment("abc123", request)</code>.</li>
+    <li>In the service: <code>paymentStore.exists("abc123")</code> &rarr; the map is empty &rarr; returns
+    <code>false</code>. The whole duplicate branch is skipped.</li>
+    <li><code>Thread.sleep(2000)</code> — the thread pauses 2 seconds (simulated payment work).</li>
+    <li><code>response = new PaymentResponse("Charged 100.0 GHS")</code>.</li>
+    <li><code>payment = new StoredPayment(response, request)</code> — bundles them.</li>
+    <li><code>paymentStore.save("abc123", payment)</code> — <strong>the map now contains:</strong>
+    <code>{ "abc123" =&gt; StoredPayment(request=100.0/GHS, response="Charged 100.0 GHS") }</code>.</li>
+    <li>The service returns <code>new PaymentResult(response, false)</code>.</li>
+    <li>Back in the controller: <code>result.isCacheHit()</code> is <code>false</code>, so it returns
+    <code>ResponseEntity.ok(result.getResponse())</code>.</li>
+  </ol>
+  <p><strong>The response the client receives:</strong></p>
+<pre><code>HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+  "message": "Charged 100.0 GHS"
+}</code></pre>
+  <p><strong>What happened in memory:</strong> the map went from empty to holding one entry. The customer
+  was charged once. The reply took ~2 seconds.</p>
+
+  <h3>Scenario 2 — Duplicate Request: Same Key, Same Body</h3>
+  <p>This is the retry. The client did not get the first reply in time (or just resent), so it sends the
+  <em>identical</em> request again.</p>
+<pre><code>POST /process-payment  HTTP/1.1
+Idempotency-Key: abc123          &lt;-- SAME key as Scenario 1
+
+{
+  "amount": 100,                 &lt;-- SAME body
+  "currency": "GHS"
+}</code></pre>
+  <p><strong>The code path:</strong></p>
+  <ol>
+    <li>Controller fills <code>key = "abc123"</code>, <code>request = 100.0 / "GHS"</code>, calls the
+    service.</li>
+    <li>In the service: <code>paymentStore.exists("abc123")</code> &rarr; the map already has this key
+    &rarr; returns <code>true</code>. We <strong>enter the duplicate branch.</strong></li>
+    <li><code>StoredPayment saved = paymentStore.get("abc123")</code> — fetches the record from
+    Scenario 1.</li>
+    <li>The conflict check runs:
+      <ul>
+        <li><code>saved.getRequest().getAmount() == requests.getAmount()</code> &rarr;
+        <code>100.0 == 100.0</code> &rarr; <code>true</code>.</li>
+        <li><code>saved.getRequest().getCurrency().equals(requests.getCurrency())</code> &rarr;
+        <code>"GHS".equals("GHS")</code> &rarr; <code>true</code>.</li>
+        <li><code>true && true</code> &rarr; <code>true</code> — the bodies match.</li>
+      </ul>
+    </li>
+    <li><code>return new PaymentResult(saved.getResponse(), true)</code> — returns the <strong>stored</strong>
+    response with <code>cacheHit = true</code>. Notice: <strong>no Thread.sleep, no new charge, no new
+    save.</strong> The method exits immediately.</li>
+    <li>Back in the controller: <code>result.isCacheHit()</code> is <code>true</code>, so it builds
+    <code>ResponseEntity.ok().header("X-Cache-Hit","true").body(...)</code>.</li>
+  </ol>
+  <p><strong>The response the client receives:</strong></p>
+<pre><code>HTTP/1.1 200 OK
+Content-Type: application/json
+X-Cache-Hit: true                &lt;-- the replay signal
+
+{
+  "message": "Charged 100.0 GHS"
+}</code></pre>
+  <p><strong>What happened in memory:</strong> <em>nothing changed</em> — the map still has exactly one
+  entry. The customer was <strong>not</strong> charged again. The reply was instant (no 2-second wait).
+  The <code>X-Cache-Hit: true</code> header tells the caller "this is a replay." <strong>This is
+  idempotency working — the whole point of the project.</strong></p>
+
+  <h3>Scenario 3 — Same Key, Different Body</h3>
+  <p>Now something is wrong. A request arrives reusing key <code>abc123</code> but with a <em>different</em>
+  amount. This could be a client bug, or an attempt to misuse the key.</p>
+<pre><code>POST /process-payment  HTTP/1.1
+Idempotency-Key: abc123          &lt;-- SAME key
+
+{
+  "amount": 999,                 &lt;-- DIFFERENT amount
+  "currency": "GHS"
+}</code></pre>
+  <p><strong>The code path:</strong></p>
+  <ol>
+    <li>Controller fills <code>key = "abc123"</code>, <code>request = 999.0 / "GHS"</code>, calls the
+    service.</li>
+    <li><code>paymentStore.exists("abc123")</code> &rarr; <code>true</code> &rarr; enter the duplicate
+    branch.</li>
+    <li><code>saved = paymentStore.get("abc123")</code> — the stored record still holds
+    <code>amount = 100.0</code>.</li>
+    <li>The conflict check:
+      <ul>
+        <li><code>100.0 == 999.0</code> &rarr; <code>false</code>.</li>
+        <li>The amount already failed, so <code>false && (anything)</code> &rarr; <code>false</code> — the
+        bodies do <strong>not</strong> match.</li>
+      </ul>
+    </li>
+    <li>The <code>else</code> runs:
+    <code>throw new ResponseStatusException(HttpStatus.CONFLICT, "Idempotency key already used for a
+    different request body.")</code>. The method stops instantly — no charge, no save.</li>
+    <li>Spring catches the exception and converts it into an HTTP error response. The controller's later
+    lines never run.</li>
+  </ol>
+  <p><strong>The response the client receives:</strong></p>
+<pre><code>HTTP/1.1 409 Conflict
+Content-Type: application/json
+
+{
+  "status": 409,
+  "error": "Conflict",
+  "message": "Idempotency key already used for a different request body."
+}</code></pre>
+  <p><strong>What happened in memory:</strong> <em>nothing changed</em> — the stored record was protected,
+  not overwritten. The 409 status tells the client "your request conflicts with an existing one." This
+  guards the integrity of the idempotency key: one key may represent exactly one payment, forever.</p>
+
+  <h4>The three scenarios side by side</h4>
+  <table>
+    <thead><tr><th>#</th><th>Scenario</th><th>Key seen?</th><th>Body</th><th>2s delay?</th><th>Charged?</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>First request</td><td>No (new)</td><td>—</td><td>Yes</td><td>Yes (once)</td><td>200 OK</td></tr>
+      <tr><td>2</td><td>Duplicate</td><td>Yes (seen)</td><td>same</td><td>No</td><td>No (replay)</td><td>200 OK + X-Cache-Hit: true</td></tr>
+      <tr><td>3</td><td>Conflict</td><td>Yes (seen)</td><td>different</td><td>No</td><td>No</td><td>409 Conflict</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ================= PHASE 6 ================= -->
+  <h2 class="phase" id="phase6">Phase 6 — Mock Interview</h2>
+  <p>Below are likely questions grouped by topic, each with a strong, beginner-friendly answer. Read the
+  answer, then practise saying it in your own words.</p>
+
+  <h3>6.1 Project &amp; Idempotency Questions</h3>
+
+  <p><strong>Q: Explain your project in one minute.</strong></p>
+  <div class="callout interview">
+    <p>A: "It is a Spring Boot REST API called the Idempotency Gateway. It solves the double-charging
+    problem in payments. When the network is unreliable, a client may send the same payment twice. My
+    gateway makes every payment carry a unique <code>Idempotency-Key</code> in a header. The first request
+    with a key is processed and its result is saved. Any later request with the same key just gets the
+    saved result back instead of charging again. If the same key arrives with a different payment body, I
+    reject it with a 409 Conflict. So the customer is always charged exactly once."</p>
+  </div>
+
+  <p><strong>Q: What does idempotency mean?</strong></p>
+  <div class="callout interview">
+    <p>A: "It means doing an operation many times has the same effect as doing it once. Charging money is
+    naturally not idempotent — each charge takes money. My project adds idempotency on top of it by
+    remembering, with a key, which payments were already processed."</p>
+  </div>
+
+  <p><strong>Q: Why does double charging happen, and why fix it on the server?</strong></p>
+  <div class="callout interview">
+    <p>A: "It happens because of network timeouts, automatic client retries, and slow responses. The
+    client cannot tell whether its request failed or just the reply got lost — both look like silence — so
+    it retries. Only the server knows whether it already processed the request, so the fix has to live on
+    the server."</p>
+  </div>
+
+  <p><strong>Q: Why put the key in a header instead of the body?</strong></p>
+  <div class="callout interview">
+    <p>A: "The key is metadata <em>about</em> the request, not part of the payment data itself. Headers
+    are the natural place for metadata. It is also the convention used by real systems like Stripe, which
+    use an <code>Idempotency-Key</code> header."</p>
+  </div>
+
+  <p><strong>Q: Why do you also compare the request body?</strong></p>
+  <div class="callout interview">
+    <p>A: "Because a key alone is not enough. If a key were reused for a genuinely different payment — a
+    different amount — replaying the old answer would be wrong and would hide a real transaction. So I
+    store the original request and compare it. Same key plus same body means a true retry; same key plus
+    different body is a conflict, so I return 409."</p>
+  </div>
+
+  <h3>6.2 Spring Boot Questions</h3>
+
+  <p><strong>Q: What is Spring Boot, and why use it?</strong></p>
+  <div class="callout interview">
+    <p>A: "Spring Boot is a framework that makes building Java backends fast. It removes manual
+    configuration with auto-configuration, includes an embedded Tomcat server so I don't install one, and
+    lets me add features with one-line starter dependencies. I could write a working REST API quickly and
+    focus on my actual logic."</p>
+  </div>
+
+  <p><strong>Q: What is dependency injection? Did you use it?</strong></p>
+  <div class="callout interview">
+    <p>A: "Dependency injection means a class declares what it needs and the framework supplies it,
+    instead of the class building its own dependencies. I used constructor injection everywhere — my
+    controller's constructor takes a <code>PaymentService</code>, and my service's constructor takes a
+    <code>PaymentStore</code>. Spring creates those objects as beans at startup and passes them in. It
+    keeps classes loosely coupled and easy to test."</p>
+  </div>
+
+  <p><strong>Q: What is the difference between @Component, @Service, and @RestController?</strong></p>
+  <div class="callout interview">
+    <p>A: "They all register a class as a Spring-managed bean. <code>@Component</code> is the generic one.
+    <code>@Service</code> and <code>@RestController</code> are specialised versions that also document
+    intent — <code>@Service</code> means business logic, <code>@RestController</code> means a web request
+    handler whose return values become the response body. I used <code>@Component</code> on my store,
+    <code>@Service</code> on my service, and <code>@RestController</code> on my controller."</p>
+  </div>
+
+  <p><strong>Q: What does @SpringBootApplication do?</strong></p>
+  <div class="callout interview">
+    <p>A: "It is three annotations in one: it marks the configuration class, enables auto-configuration,
+    and turns on component scanning so Spring finds my controller, service, and store automatically."</p>
+  </div>
+
+  <p><strong>Q: What is the difference between @RequestBody and @RequestHeader?</strong></p>
+  <div class="callout interview">
+    <p>A: "<code>@RequestHeader</code> pulls a value from an HTTP header — I use it to read the
+    <code>Idempotency-Key</code>. <code>@RequestBody</code> converts the JSON body of the request into a
+    Java object — I use it to turn the payment JSON into a <code>PaymentRequests</code> object."</p>
+  </div>
+
+  <h3>6.3 API &amp; HTTP Questions</h3>
+
+  <p><strong>Q: Why POST and not GET for the payment endpoint?</strong></p>
+  <div class="callout interview">
+    <p>A: "Because processing a payment is an action that changes state — it moves money. GET is for
+    reading data and should not change anything. POST is the correct verb for performing an action, and
+    POST also carries a request body, which I need for the payment details."</p>
+  </div>
+
+  <p><strong>Q: What status codes do you return and why?</strong></p>
+  <div class="callout interview">
+    <p>A: "200 OK for a successful payment and also for a successful replay of a stored one. 409 Conflict
+    when a key is reused with a different body — 409 specifically means the request conflicts with
+    existing state, which is exactly the situation."</p>
+  </div>
+
+  <p><strong>Q: What is REST? Is your API RESTful?</strong></p>
+  <div class="callout interview">
+    <p>A: "REST is a style of API design: organise around resources named by URLs, use standard HTTP
+    methods, exchange JSON, and report outcomes with HTTP status codes. My API follows that — it exposes
+    endpoints over HTTP, uses POST, speaks JSON, and returns proper status codes — so yes, it is a small
+    RESTful API."</p>
+  </div>
+
+  <p><strong>Q: What is the X-Cache-Hit header?</strong></p>
+  <div class="callout interview">
+    <p>A: "It is a custom header I add. When a response is a replay of an already-processed payment, I set
+    <code>X-Cache-Hit: true</code>. It lets the client and anyone debugging clearly see 'this was served
+    from memory, not freshly charged.' It was my own chosen extra feature."</p>
+  </div>
+
+  <h3>6.4 Java &amp; Architecture Questions</h3>
+
+  <p><strong>Q: Why ConcurrentHashMap instead of HashMap?</strong></p>
+  <div class="callout interview">
+    <p>A: "A web server handles many requests at the same time on different threads. A plain
+    <code>HashMap</code> is not thread-safe — concurrent access can corrupt it.
+    <code>ConcurrentHashMap</code> is built for safe, efficient use by many threads at once. Since a
+    payment gateway gets bursts of concurrent and duplicate requests, it is the right choice."</p>
+  </div>
+
+  <p><strong>Q: Why did you compare currency with .equals() but amount with ==?</strong></p>
+  <div class="callout interview">
+    <p>A: "<code>amount</code> is a primitive <code>double</code>, so <code>==</code> compares the actual
+    numbers. <code>currency</code> is a <code>String</code>, which is an object; <code>==</code> would
+    compare object identity, not the text. <code>.equals()</code> compares the text content, which is what
+    I want."</p>
+  </div>
+
+  <p><strong>Q: Describe your architecture.</strong></p>
+  <div class="callout interview">
+    <p>A: "Four layers. The controller handles HTTP. The service holds the idempotency business logic. The
+    store handles data — it is the in-memory memory. The model layer holds plain data classes. Each layer
+    has one job — that is separation of concerns. The flow is client &rarr; controller &rarr; service
+    &rarr; store and back."</p>
+  </div>
+
+  <p><strong>Q: Why separate the store into its own layer?</strong></p>
+  <div class="callout interview">
+    <p>A: "So the storage mechanism is swappable. Today it is a <code>ConcurrentHashMap</code> in memory.
+    To move to a real database like Redis I would change only the store class — the service and
+    controller would not change at all, because they only depend on the store's methods, not on how it
+    stores data."</p>
+  </div>
+
+  <h3>6.5 Honest "Weakness / Improvement" Questions</h3>
+  <p>Interviewers love asking what you would improve. Answering well shows maturity. Be honest and
+  specific:</p>
+
+  <p><strong>Q: What are the limitations of this project?</strong></p>
+  <div class="callout interview">
+    <p>A: "Three main ones, and I know how I'd address each. First, the store is in memory, so data is
+    lost on restart and not shared across multiple instances — I would move it to Redis with a
+    time-to-live on each key. Second, there are no automated tests for the idempotency logic yet — only
+    the default context-loads test — so I would add tests for all three scenarios. Third, there is no
+    input validation; a missing currency could cause a null error — I would add validation and a global
+    exception handler so all errors return clean JSON."</p>
+  </div>
+
+  <p><strong>Q: Is there a concurrency edge case?</strong></p>
+  <div class="callout interview">
+    <p>A: "Yes — if two identical requests arrive at almost the same instant, both could pass the
+    <code>exists</code> check before either has saved, so both would process. The clean fix is an atomic
+    operation like <code>putIfAbsent</code> on the map, so only the first wins. It is a great example of
+    why I chose <code>ConcurrentHashMap</code> — it gives me those atomic methods to build on."</p>
+  </div>
+
+  <p><strong>Q: Why a 2-second sleep?</strong></p>
+  <div class="callout interview">
+    <p>A: "It is a deliberate simulation of slow real-world payment work, like contacting a bank. It also
+    makes the demo realistic, because it creates the time window in which a client would time out and
+    retry — which is exactly what lets me show the idempotency working. In a real system that line would
+    be replaced by the actual payment call."</p>
+  </div>
+
+  <h3>6.6 Final Interview Advice</h3>
+  <ul>
+    <li><strong>Lead with the problem.</strong> Always start "this prevents double charging" before any
+    code detail. Interviewers care that you understand <em>why</em>.</li>
+    <li><strong>Use the request flow.</strong> If you get stuck, narrate client &rarr; controller &rarr;
+    service &rarr; store. It always gives you something correct to say.</li>
+    <li><strong>It is fine to say "I don't know, but here is how I'd find out."</strong> That is better
+    than guessing.</li>
+    <li><strong>Own the trade-offs.</strong> Saying "I used in-memory storage to stay focused; Redis would
+    be the production choice" sounds far stronger than pretending the project is perfect.</li>
+    <li><strong>Speak slowly and in plain words.</strong> You understand this project — let that show by
+    being calm, not by rushing jargon.</li>
+  </ul>
+
+  <!-- ================= PHASE 7 ================= -->
+  <h2 class="phase" id="phase7">Phase 7 — 5-Minute Presentation Script</h2>
+  <p>Below is a word-for-word script for a roughly 5-minute video or in-person presentation. It is written
+  to sound natural and confident but still beginner-friendly. Practise it out loud two or three times.
+  Pause at each paragraph break.</p>
+
+  <h3>Speaking Script</h3>
+
+  <h4>[0:00 - 0:40] Opening &amp; the Problem</h4>
+  <div class="callout interview">
+    <p>"Hi, my name is Nsumba Herve, and I'd like to walk you through my project: the Idempotency Gateway,
+    which I also call the Pay-Once Protocol.</p>
+    <p>Let me start with the real-world problem it solves. Imagine you pay 100 cedis with a mobile money
+    app. The internet is slow that day, so your phone doesn't get a reply. It assumes the payment failed
+    and automatically sends it again. But the first payment may have actually succeeded — so now you've
+    been charged twice for one purchase. That's called double charging, and in payment systems it's a
+    serious bug. My project is the safety layer that prevents it."</p>
+  </div>
+
+  <h4>[0:40 - 1:30] The Core Idea: Idempotency</h4>
+  <div class="callout interview">
+    <p>"The solution is a concept called idempotency. Idempotency just means that doing something many
+    times has the same effect as doing it once — like pressing an elevator button ten times still brings
+    one elevator.</p>
+    <p>The way I make payments idempotent is with an idempotency key. The client generates one unique key
+    for a payment and sends it in an HTTP header called <code>Idempotency-Key</code> — on the first
+    request and on every retry. My server uses that key as a memory. The first time it sees a key, it
+    processes the payment and saves the result. Every time it sees that same key again, it doesn't charge
+    again — it just returns the saved result. So the customer is always charged exactly once. This is the
+    same approach used by real payment companies like Stripe."</p>
+  </div>
+
+  <h4>[1:30 - 2:45] The Architecture</h4>
+  <div class="callout interview">
+    <p>"I built this with Spring Boot, Java 17, and Maven, as a REST API. I designed it in clean, separated
+    layers, because each layer should have only one job.</p>
+    <p>The Controller layer is the front desk — it handles the HTTP request: it reads the idempotency key
+    from the header and the payment data from the JSON body. The Service layer is the brain — it holds all
+    the idempotency rules and makes the decisions. The Store layer is the memory — it saves and looks up
+    payments using a <code>ConcurrentHashMap</code>, which I chose because a web server handles many
+    requests at once and that map is thread-safe. And the Model layer holds the simple data classes that
+    describe what a request, a response, and a stored payment look like.</p>
+    <p>So a request flows like this: client, to controller, to service, to store, and the response comes
+    back the same way. Keeping these layers separate means I could, for example, swap the in-memory store
+    for a real database like Redis and only change one file."</p>
+  </div>
+
+  <h4>[2:45 - 4:00] How It Behaves — Three Cases</h4>
+  <div class="callout interview">
+    <p>"My gateway handles three situations.</p>
+    <p>First, a brand-new request. The key has never been seen, so the service processes the payment — I
+    simulate the real work with a short delay — builds the response, saves it under the key, and returns a
+    normal 200 OK.</p>
+    <p>Second, a duplicate request — the same key and the same payment details. The service sees the key
+    already exists, so it does not charge again. It instantly returns the saved response, and it adds a
+    custom header, <code>X-Cache-Hit: true</code>, so anyone can clearly see this was a replay, not a new
+    charge. That header was my own chosen extra feature.</p>
+    <p>Third, a conflict — the same key but a different payment body, like a different amount. That's
+    dangerous, because one key should only ever mean one payment. So I store the original request and
+    compare it. If it doesn't match, I reject the request with a 409 Conflict status, which is the correct
+    HTTP code for 'this conflicts with something that already exists.'"</p>
+  </div>
+
+  <h4>[4:00 - 4:40] What I Learned &amp; My Contribution</h4>
+  <div class="callout interview">
+    <p>"Building this taught me a lot of backend fundamentals: how REST APIs and HTTP work, how Spring Boot
+    uses dependency injection to wire classes together, why thread safety matters on a server, and how to
+    design code in clean, separate layers.</p>
+    <p>I also thought about the project's limitations honestly. The store is in memory, so for production I
+    would move it to Redis with an expiry time on each key. I would add automated tests for all three
+    scenarios, and I would handle the rare case where two identical requests arrive at the exact same
+    instant by using an atomic map operation."</p>
+  </div>
+
+  <h4>[4:40 - 5:00] Conclusion</h4>
+  <div class="callout interview">
+    <p>"To sum up: my Idempotency Gateway is a Spring Boot REST API that makes payment requests safe to
+    retry, so a customer is never accidentally charged twice. It's a small project, but it taught me how
+    real fintech systems protect people's money. Thank you for watching."</p>
+  </div>
+
+  <h3>Delivery Tips</h3>
+  <ul>
+    <li><strong>Pace:</strong> speak a little slower than feels natural. Five minutes is plenty of
+    time.</li>
+    <li><strong>Show, don't only tell:</strong> if it is a screen recording, run the app, send a first
+    request in Postman, then resend the duplicate and point at the <code>X-Cache-Hit: true</code> header
+    appearing.</li>
+    <li><strong>Energy:</strong> sound interested in your own project — the problem (people losing money)
+    is genuinely interesting.</li>
+    <li><strong>If you stumble, keep going.</strong> A small pause is invisible to the viewer; stopping to
+    restart is not.</li>
+    <li><strong>End cleanly</strong> with the one-line summary. Strong first and last sentences are what
+    people remember.</li>
+  </ul>
+
+  <h3>Closing Note</h3>
+  <p>You built a real, working solution to a real fintech problem, and you structured it with professional
+  layering. Walk in knowing that. If you can explain the three scenarios in Phase 5 and the request flow
+  in Phase 2, you understand this project as its owner. Good luck.</p>
+
+  <hr>
+  <p style="text-align:center; color:var(--muted); font-size:0.9rem;">
+    Idempotency Gateway — Pay-Once Protocol &middot; Spring Boot &middot; Java 17 &middot; Maven<br>
+    Deep teaching walkthrough &middot; Author: Nsumba Herve
+  </p>
+
+</div>
+</body>
+</html>
